@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Right Panel</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="panel-container">
+    <header class="panel-header">
+      <h1 id="panel-main-heading">Face Navigator</h1>
+    </header>
+    
+    <main class="panel-content">
+      <div class="camera-container">
+        <!-- Video Box with Canvas Overlay -->
+        <div class="video-frame">
+          <video id="webcam-preview" autoplay playsinline muted></video>
+          <canvas id="canvas-overlay"></canvas>
+          <div id="camera-placeholder" class="camera-placeholder">
+            <div class="camera-icon">📷</div>
+            <p class="placeholder-title">Starting Human AI...</p>
+            <p class="placeholder-subtitle">Initialising camera and models</p>
+          </div>
+        </div>
+
+        <!-- Calibration Section -->
+        <div class="calibration-section">
+          <button id="btn-calibrate" class="btn-primary">Start Calibration</button>
+          <div id="calibration-status" class="status-text">Click to start step-by-step calibration</div>
+        </div>
+
+        <!-- Settings Section -->
+        <div class="settings-section">
+          <h2>Navigator Settings</h2>
+          
+          <div class="settings-group">
+            <div class="toggle-control">
+              <label for="toggle-navigation">Enable Face Cursor</label>
+              <input type="checkbox" id="toggle-navigation" checked>
+            </div>
+            
+            <div class="toggle-control">
+              <label for="toggle-aim-assist">Aim Assist Snapping</label>
+              <input type="checkbox" id="toggle-aim-assist" checked>
+            </div>
+            
+            <div class="toggle-control">
+              <label for="toggle-clicking">Enable Clicking (Dwell & Mouth)</label>
+              <input type="checkbox" id="toggle-clicking" checked>
+            </div>
+
+            <div class="toggle-control">
+              <label for="toggle-scroll">Edge Scrolling</label>
+              <input type="checkbox" id="toggle-scroll" checked>
+            </div>
+          </div>
+
+          <div class="slider-group">
+            <div class="slider-control">
+              <div class="slider-header">
+                <label for="slider-sensitivity">Range Scaling</label>
+                <span id="val-sensitivity">1.0x</span>
+              </div>
+              <input type="range" id="slider-sensitivity" min="0.2" max="3.0" step="0.1" value="1.0">
+            </div>
+
+            <div class="slider-control">
+              <div class="slider-header">
+                <label for="slider-filter">Jitter Filter (fc)</label>
+                <span id="val-filter">0.05</span>
+              </div>
+              <input type="range" id="slider-filter" min="0.01" max="0.5" step="0.01" value="0.05">
+            </div>
+
+            <div class="slider-control">
+              <div class="slider-header">
+                <label for="slider-snap-radius">Aim Assist Radius</label>
+                <span id="val-snap-radius">45px</span>
+              </div>
+              <input type="range" id="slider-snap-radius" min="20" max="150" step="5" value="45">
+            </div>
+
+            <div class="slider-control">
+              <div class="slider-header">
+                <label for="slider-dwell-time">Dwell Time</label>
+                <span id="val-dwell-time">600ms</span>
+              </div>
+              <input type="range" id="slider-dwell-time" min="200" max="1500" step="50" value="600">
+            </div>
+          </div>
+        </div>
+
+        <!-- Permission Alert Info -->
+        <div id="error-card" class="error-card hidden">
+          <div class="error-card-header">
+            <span class="error-icon">⚠️</span>
+            <p class="error-title">Permission Required</p>
+          </div>
+          <p class="error-text">Chrome restricts camera permission prompts inside side panels. Please grant access using the button below:</p>
+          <button id="btn-grant-permission" class="btn-primary">Grant Camera Permission</button>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="human.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

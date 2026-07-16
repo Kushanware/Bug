@@ -206,10 +206,66 @@ body {
 }
 
 .btn-primary:hover {
-  opacity: 0.95;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
+  opacity: 0.9;
 }
+
+/* System HUD */
+.system-hud {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  margin: 12px 20px;
+  border-radius: 12px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.hud-icon {
+  font-size: 24px;
+  margin-right: 12px;
+}
+
+.hud-text {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.state-ready {
+  border-color: #10b981;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.2);
+}
+.state-ready .hud-icon { color: #10b981; }
+
+.state-listening {
+  border-color: #3b82f6;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+  animation: pulse-blue 1.5s infinite;
+}
+.state-listening .hud-icon { color: #3b82f6; }
+
+.state-executing {
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+.state-executing .hud-icon { color: #f59e0b; }
+
+.state-paused {
+  border-color: #ef4444;
+  opacity: 0.8;
+}
+.state-paused .hud-icon { color: #ef4444; }
+
+@keyframes pulse-blue {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+
 
 .btn-primary:active {
   transform: translateY(1px);

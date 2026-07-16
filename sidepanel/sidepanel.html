@@ -18,6 +18,12 @@
       <h1 id="panel-main-heading">Face Navigator</h1>
     </header>
 
+    <!-- Large HUD for System State -->
+    <div id="system-hud" class="system-hud state-ready">
+      <div id="hud-icon" class="hud-icon">✓</div>
+      <div id="hud-text" class="hud-text">Ready</div>
+    </div>
+
     <main class="panel-content">
       <div class="camera-container">
         <!-- Video Box with Canvas Overlay -->
@@ -92,17 +98,6 @@
               </div>
               <input type="range" id="slider-snap-radius" min="20" max="150" step="5" value="45">
             </div>
-
-            <div class="slider-control">
-              <div class="slider-header">
-                <label for="slider-dwell-time">Dwell Time</label>
-                <span id="val-dwell-time">2000ms</span>
-              </div>
-              <input type="range" id="slider-dwell-time" min="500" max="5000" step="100" value="2000">
-              <small style="color: #6b7280; font-size: 11px; margin-top: 4px; display: block;">
-                Hold cursor on element for this long to click (10s default)
-              </small>
-            </div>
           </div>
         </div>
 
@@ -119,8 +114,8 @@
       </div>
     </main>
   </div>
-  <script src="human.js"></script>
-  <script type="module" src="sidepanel.js"></script>
+  <script src="../vendor/human.js"></script>
+  <script type="module" src="../scripts/sidepanel.js"></script>
 </body>
 
 </html>

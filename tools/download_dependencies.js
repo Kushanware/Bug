@@ -3,20 +3,20 @@ const https = require('https');
 const path = require('path');
 
 const urls = {
-  'human.js': 'https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js',
+  '../vendor/human.js': 'https://cdn.jsdelivr.net/npm/@vladmandic/human/dist/human.js',
 
-  'models/blazeface.json':
+  '../models/blazeface.json':
     'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/blazeface.json',
 
-  'models/blazeface.bin':
+  '../models/blazeface.bin':
     'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/blazeface.bin',
 
-  'models/facemesh.json':
+  '../models/facemesh.json':
     'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/facemesh.json',
 
-  'models/facemesh.bin':
+  '../models/facemesh.bin':
     'https://cdn.jsdelivr.net/npm/@vladmandic/human/models/facemesh.bin'
-};;
+};
 
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {

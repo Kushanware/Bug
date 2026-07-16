@@ -142,9 +142,8 @@
   navRightZone.id = 'fn-nav-right';
   navRightZone.className = 'fn-nav-zone';
 
-  const SpeechRecognition =
-    window.SpeechRecognition ||
-    window.webkitSpeechRecognition;
+  // Voice Recognition
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   let recognition = null;
   let voiceRunning = false;
 
@@ -171,8 +170,6 @@
   let curX = targetX;
   let curY = targetY;
 
-  let lastTarget = null;
-  let dwellStartTime = 0;
   let clickCooldown = false;
   let lastScrollTime = 0;
 
@@ -180,9 +177,11 @@
   let navDwellStartTime = 0;
   let navCooldown = false;
 
+  // Path history for circle gesture detection
+  let pathHistory = [];
+
   // Configuration
   let sensitivityRadius = 45;
-  let dwellTimeMs = 2000;
   let isAimAssistEnabled = true;
   let isClickingEnabled = true;
   let isScrollEnabled = true;
@@ -242,56 +241,10 @@
     return nearest;
   }
 
-  function handleDwell(snappedTarget) {
-    if (clickCooldown || !isClickingEnabled) return;
-
-    if (snappedTarget) {
-      if (snappedTarget.element === lastTarget) {
-        if (dwellStartTime === 0) dwellStartTime = performance.now();
-        const elapsed = performance.now() - dwellStartTime;
-
-        // Visual progress ring
-        const progress = Math.min(elapsed / dwellTimeMs, 1);
-        const ringSize = 32 - (32 - 14) * progress;
-        ring.style.width = `${ringSize}px`;
-        ring.style.height = `${ringSize}px`;
-        ring.style.borderColor = `rgba(168, 85, 247, ${0.4 + 0.6 * progress})`;
-
-        // Only trigger click after 10 seconds
-        if (elapsed >= dwellTimeMs) {
-          triggerClick(snappedTarget.element);
-        }
-      } else {
-        resetDwell(snappedTarget.element);
-      }
-    } else {
-      resetDwell(null);
-    }
-  }
-
-  function resetDwell(newTarget) {
-    if (lastTarget && lastTarget !== newTarget) {
-      lastTarget.classList.remove('face-nav-highlight');
-    }
-
-    dwellStartTime = 0;
-    lastTarget = newTarget;
-    ring.style.width = '32px';
-    ring.style.height = '32px';
-    ring.style.borderColor = 'rgba(168, 85, 247, 0.4)';
-
-    if (newTarget) {
-      newTarget.classList.add('face-nav-highlight');
-    }
-  }
-
   function triggerClick(element) {
-    if (!element) return;
+    if (!element || clickCooldown) return;
     try {
       clickCooldown = true;
-      dwellStartTime = 0;
-
-      element.classList.remove('face-nav-highlight');
 
       let clickX = curX;
       let clickY = curY;
@@ -396,7 +349,6 @@
     const width = maxX - minX;
     const height = maxY - minY;
 
-    // Minimum size for a deliberate head circle
     if (width < 250 || height < 250) return;
 
     const centerX = minX + width / 2;
@@ -409,7 +361,6 @@
       const angle = Math.atan2(pathHistory[i].y - centerY, pathHistory[i].x - centerX);
       let dTheta = angle - prevAngle;
 
-      // Normalize to handle -PI to PI wrap-around
       if (dTheta > Math.PI) dTheta -= 2 * Math.PI;
       if (dTheta < -Math.PI) dTheta += 2 * Math.PI;
 
@@ -417,11 +368,9 @@
       prevAngle = angle;
     }
 
-    // Trigger if almost a full circle (360 degrees = ~6.28 radians)
     if (Math.abs(cumulativeAngle) > 5.5) {
-      pathHistory = []; // Prevent double trigger
+      pathHistory = [];
 
-      // Show big blue flash in the center of the screen
       flash.style.borderColor = '#3b82f6';
       flash.style.left = `${window.innerWidth / 2}px`;
       flash.style.top = `${window.innerHeight / 2}px`;
@@ -429,14 +378,13 @@
       void flash.offsetWidth;
       flash.style.animation = 'face-nav-flash-anim 0.6s ease-out';
 
-      // Navigate to Google
       setTimeout(() => {
         window.location.href = "https://www.google.com/";
       }, 500);
     }
   }
 
-  // Smooth cursor physics - responsive but smooth
+  // Smooth cursor physics
   function updateCursorPhysics() {
     if (!window.cursorInitialized) {
       curX = window.innerWidth / 2;
@@ -454,14 +402,12 @@
       targetY = curY;
     }
 
-    // Faster response - higher lerp for quicker movement
     const dx = targetX - curX;
     const dy = targetY - curY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const screenDiag = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2);
     const normalizedDist = dist / screenDiag;
 
-    // More responsive: 0.15 base, up to 0.45 for large distances
     const lerpAlpha = 0.05 + normalizedDist * 0.10;
 
     curX += dx * lerpAlpha;
@@ -473,7 +419,6 @@
 
     // Aim assist
     let snapped = null;
-
     if (isAimAssistEnabled) {
       snapped = getNearestTarget(curX, curY);
     }
@@ -482,17 +427,18 @@
       snapIndicator.style.opacity = '1';
       snapIndicator.style.left = `${snapped.x}px`;
       snapIndicator.style.top = `${snapped.y}px`;
-
       ring.style.left = `${snapped.x}px`;
       ring.style.top = `${snapped.y}px`;
-
-      handleDwell(snapped);
     } else {
       snapIndicator.style.opacity = '0';
       ring.style.left = `${curX}px`;
       ring.style.top = `${curY}px`;
-      handleDwell(null);
     }
+
+    // Record path for circle gesture
+    pathHistory.push({ x: curX, y: curY });
+    if (pathHistory.length > 60) pathHistory.shift();
+    detectGesture();
 
     handleEdgeScroll(curY);
     handleBrowserNav(curX);
@@ -500,9 +446,10 @@
     requestAnimationFrame(updateCursorPhysics);
   }
 
+  // Voice Commands
   function startVoiceRecognition() {
     if (!SpeechRecognition) {
-      alert("Speech Recognition not supported");
+      console.warn("Speech Recognition not supported");
       return;
     }
     if (voiceRunning) return;
@@ -518,7 +465,7 @@
       const command = event.results[event.results.length - 1][0].transcript
         .trim()
         .toLowerCase();
-      console.log(command);
+      console.log("Voice:", command);
       handleVoiceCommand(command);
     };
     recognition.onend = () => {
@@ -527,7 +474,7 @@
       }
     };
     recognition.onerror = (e) => {
-      console.log(e.error);
+      console.warn("Voice error:", e.error);
     };
     recognition.start();
   }
@@ -540,74 +487,85 @@
     }
   }
 
+  let voiceContext = "default";
+  let voiceSynthesis = window.speechSynthesis;
+
   function handleVoiceCommand(command) {
     console.log("Executing:", command);
+
+    // If we are waiting for a search query
+    if (voiceContext === "awaiting_search_query") {
+      voiceContext = "default"; // Reset state
+      if (command && !command.includes("cancel") && !command.includes("stop")) {
+        chrome.runtime.sendMessage({ action: 'voice_search', query: command });
+      }
+      return;
+    }
+
     if (command.includes("scroll down")) {
-      window.scrollBy({
-        top: 500,
-        behavior: "smooth"
-      });
+      window.scrollBy({ top: 500, behavior: "smooth" });
     }
     else if (command.includes("scroll up")) {
-      window.scrollBy({
-        top: -500,
-        behavior: "smooth"
-      });
+      window.scrollBy({ top: -500, behavior: "smooth" });
     }
-    else if (command.includes("scroll top")) {
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-      });
+    else if (command.includes("scroll top") || command.includes("top of page")) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    else if (command.includes("scroll bottom")) {
-      window.scrollTo({
-        top: document.body.scrollHeight,
-        behavior: "smooth"
-      });
+    else if (command.includes("scroll bottom") || command.includes("bottom of page")) {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
     }
     else if (command.includes("click")) {
       const snapped = getNearestTarget(curX, curY);
-      const target =
-        snapped
-          ? snapped.element
-          : document.elementFromPoint(curX, curY);
-      if (target) {
-        triggerClick(target);
-      }
+      const target = snapped ? snapped.element : document.elementFromPoint(curX, curY);
+      if (target) triggerClick(target);
     }
-    else if (command.includes("back")) {
+    else if (command.includes("go back") || command === "back") {
       history.back();
     }
-    else if (command.includes("reload")) {
+    else if (command.includes("go forward") || command === "forward") {
+      history.forward();
+    }
+    else if (command.includes("reload") || command.includes("refresh")) {
       location.reload();
+    }
+    else if (command.startsWith("search ")) {
+      // One-shot search (e.g. "search python jobs")
+      const query = command.replace("search ", "").trim();
+      if (query) {
+        chrome.runtime.sendMessage({ action: 'voice_search', query: query });
+      }
+    }
+    else if (command === "search") {
+      // Two-step conversational search
+      voiceContext = "awaiting_search_query";
+      if (voiceSynthesis) {
+        const utterance = new SpeechSynthesisUtterance("What do you want to search?");
+        utterance.rate = 1.1;
+        voiceSynthesis.speak(utterance);
+      }
     }
   }
 
   // Start physics loop
   requestAnimationFrame(updateCursorPhysics);
 
-  // Message listener for sidepanel
+  // Message listener
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("Message Received:", message);
     try {
       if (message.action === 'move_cursor') {
         targetX = message.x * window.innerWidth;
         targetY = message.y * window.innerHeight;
       } else if (message.action === 'config') {
         sensitivityRadius = message.sensitivityRadius || sensitivityRadius;
-        dwellTimeMs = message.dwellTime || dwellTimeMs;
         isAimAssistEnabled = message.isAimAssistEnabled !== undefined ? message.isAimAssistEnabled : isAimAssistEnabled;
         isClickingEnabled = message.isClickingEnabled !== undefined ? message.isClickingEnabled : isClickingEnabled;
         isScrollEnabled = message.isScrollEnabled !== undefined ? message.isScrollEnabled : isScrollEnabled;
       } else if (message.action === 'mouth_click') {
-        if (!isClickingEnabled) return true;
+        if (!isClickingEnabled) return;
         const snapped = getNearestTarget(curX, curY);
         const targetElement = snapped ? snapped.element : document.elementFromPoint(curX, curY);
-        if (targetElement) {
-          triggerClick(targetElement);
-        }
-      } else if (message.action === "voice_toggle") {
+        if (targetElement) triggerClick(targetElement);
+      } else if (message.action === 'voice_toggle') {
         if (message.enabled) {
           startVoiceRecognition();
         } else {

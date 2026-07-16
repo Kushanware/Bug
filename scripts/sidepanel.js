@@ -67,6 +67,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   const errorCard = document.getElementById('error-card');
   const btnGrantPermission = document.getElementById('btn-grant-permission');
 
+  // HUD elements
+  const hudElement = document.getElementById('system-hud');
+  const hudIcon = document.getElementById('hud-icon');
+  const hudText = document.getElementById('hud-text');
+
+  let currentHUDState = "";
+  function updateHUD(iconText, labelText, stateClass) {
+    if (!hudElement || currentHUDState === stateClass) return;
+    currentHUDState = stateClass;
+    hudElement.className = 'system-hud ' + stateClass;
+    hudIcon.textContent = iconText;
+    hudText.textContent = labelText;
+  }
+
   const btnCalibrate = document.getElementById('btn-calibrate');
   const calibrationStatus = document.getElementById('calibration-status');
 
@@ -81,17 +95,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sliderSensitivity = document.getElementById('slider-sensitivity');
   const sliderFilter = document.getElementById('slider-filter');
   const sliderSnapRadius = document.getElementById('slider-snap-radius');
-  const sliderDwellTime = document.getElementById('slider-dwell-time');
 
   // Slider Value Readouts
   const valSensitivity = document.getElementById('val-sensitivity');
   const valFilter = document.getElementById('val-filter');
   const valSnapRadius = document.getElementById('val-snap-radius');
-  const valDwellTime = document.getElementById('val-dwell-time');
-
-  // Set initial values - Dwell time default 20000ms (20 seconds)
-  sliderDwellTime.value = 2000;
-  valDwellTime.textContent = '2000ms';
 
   let activeStream = null;
   let human = null;
@@ -122,17 +130,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     syncConfig();
   });
 
-  sliderDwellTime.addEventListener('input', () => {
-    valDwellTime.textContent = `${sliderDwellTime.value}ms`;
-    syncConfig();
-  });
-
   [
     toggleNavigation,
     toggleAimAssist,
     toggleClicking,
-    toggleScroll,
-    toggleVoice
+    toggleScroll
   ].forEach(ctrl => {
     ctrl.addEventListener("change", syncConfig);
   });
@@ -140,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Open grant permission tab
   if (btnGrantPermission) {
     btnGrantPermission.addEventListener('click', () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') });
+      chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
     });
   }
 
@@ -149,10 +151,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     startCalibration();
   });
 
+  // Voice toggle - send to content script
+  toggleVoice.addEventListener("change", () => {
+    updateHUD(
+      toggleVoice.checked ? "🎤" : "✓",
+      toggleVoice.checked ? "Listening" : "Ready",
+      toggleVoice.checked ? "state-listening" : "state-ready"
+    );
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (!tabs.length) return;
+      chrome.tabs.sendMessage(tabs[0].id, {
+        action: "voice_toggle",
+        enabled: toggleVoice.checked
+      }).catch(() => {});
+    });
+  });
+
   // Initialize Human.js AI
   const humanConfig = {
     backend: 'webgl',
-    modelBasePath: './models/',
+    modelBasePath: '../models/',
     face: {
       enabled: true,
       detector: { enabled: true, return: true, rotation: true },
@@ -177,6 +196,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await human.load();
     console.log("Human.js models loaded.");
+
+    await human.warmup();
+    console.log("Human.js warmup complete.");
 
     await startCamera();
   } catch (err) {
@@ -222,7 +244,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         chrome.tabs.sendMessage(tabs[0].id, {
           action: 'config',
           sensitivityRadius: parseFloat(sliderSnapRadius.value),
-          dwellTime: parseInt(sliderDwellTime.value, 10),
           isAimAssistEnabled: toggleAimAssist.checked,
           isClickingEnabled: toggleClicking.checked,
           isScrollEnabled: toggleScroll.checked
@@ -230,27 +251,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
-
-  toggleVoice.addEventListener("change", () => {
-
-    chrome.tabs.query(
-        { active: true, currentWindow: true },
-        (tabs) => {
-
-            if (!tabs.length) return;
-
-            chrome.tabs.sendMessage(
-                tabs[0].id,
-                {
-                    action: "voice_toggle",
-                    enabled: toggleVoice.checked
-                }
-            );
-
-        }
-    );
-
-});
 
   // Cache the active tab ID
   let activeTabId = null;
@@ -341,6 +341,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         lastFaceTime = performance.now();
         const face = result.face[0];
 
+        // Update HUD when face detected
+        if (!toggleVoice.checked) {
+          updateHUD("🖱", "Tracking", "state-ready");
+        }
+
         ctx.strokeStyle = '#a855f7';
         ctx.lineWidth = 3;
         ctx.strokeRect(face.box[0], face.box[1], face.box[2], face.box[3]);
@@ -390,6 +395,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ctx.arc(curCenterX, curCenterY + 20, 10, 0, 2 * Math.PI);
                 ctx.fill();
 
+                // Show click feedback on HUD
+                updateHUD("✓", "Clicked!", "state-executing");
+                setTimeout(() => {
+                  if (!toggleVoice.checked) {
+                    updateHUD("🖱", "Tracking", "state-ready");
+                  }
+                }, 500);
+
                 if (toggleNavigation.checked && toggleClicking.checked && activeTabId) {
                   chrome.tabs.sendMessage(activeTabId, { action: 'mouth_click' }).catch(() => { });
                 }
@@ -432,7 +445,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const centerX = (calibratedBounds.minX + calibratedBounds.maxX) / 2;
           const centerY = (calibratedBounds.minY + calibratedBounds.maxY) / 2;
 
-          let normX = -(rawTrackX - centerX) / rangeX;
+          let normX = (rawTrackX - centerX) / rangeX;
           let normY = (rawTrackY - centerY) / rangeY;
 
           const DEADZONE = 0.08;
@@ -479,6 +492,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         ctx.font = '500 14px "Plus Jakarta Sans"';
         ctx.textAlign = 'center';
         ctx.fillText('Searching for Face...', canvasElement.width / 2, 35);
+
+        // Update HUD when no face
+        if (!toggleVoice.checked) {
+          updateHUD("👀", "No Face", "state-paused");
+        }
 
         if (performance.now() - lastFaceTime > 1000) {
           if (toggleNavigation.checked && activeTabId) {

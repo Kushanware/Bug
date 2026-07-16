@@ -13,7 +13,6 @@ chrome.runtime.onInstalled.addListener(async () => {
     try {
       const tabs = await chrome.tabs.query({ url: scriptGroup.matches });
       for (const tab of tabs) {
-        // Skip restricted browser URLs (like chrome://, chrome-extension://)
         if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
           continue;
         }
@@ -29,4 +28,15 @@ chrome.runtime.onInstalled.addListener(async () => {
       console.error("Failed to query tabs for script injection:", e);
     }
   }
+});
+
+// Handle voice search from content script
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'voice_search') {
+    const query = message.query;
+    if (query) {
+      chrome.search.query({ text: query, disposition: 'NEW_TAB' });
+    }
+  }
+  return false;
 });

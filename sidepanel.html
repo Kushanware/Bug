@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,14 +8,16 @@
   <link rel="stylesheet" href="sidepanel.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
 </head>
+
 <body>
   <div class="panel-container">
     <header class="panel-header">
       <h1 id="panel-main-heading">Face Navigator</h1>
     </header>
-    
+
     <main class="panel-content">
       <div class="camera-container">
         <!-- Video Box with Canvas Overlay -->
@@ -37,18 +40,18 @@
         <!-- Settings Section -->
         <div class="settings-section">
           <h2>Navigator Settings</h2>
-          
+
           <div class="settings-group">
             <div class="toggle-control">
               <label for="toggle-navigation">Enable Face Cursor</label>
               <input type="checkbox" id="toggle-navigation" checked>
             </div>
-            
+
             <div class="toggle-control">
               <label for="toggle-aim-assist">Aim Assist Snapping</label>
               <input type="checkbox" id="toggle-aim-assist" checked>
             </div>
-            
+
             <div class="toggle-control">
               <label for="toggle-clicking">Enable Clicking (Dwell & Mouth)</label>
               <input type="checkbox" id="toggle-clicking" checked>
@@ -57,6 +60,11 @@
             <div class="toggle-control">
               <label for="toggle-scroll">Edge Scrolling</label>
               <input type="checkbox" id="toggle-scroll" checked>
+            </div>
+
+            <div class="toggle-control">
+              <label for="toggle-voice">Enable Voice Commands</label>
+              <input type="checkbox" id="toggle-voice">
             </div>
           </div>
 
@@ -88,9 +96,12 @@
             <div class="slider-control">
               <div class="slider-header">
                 <label for="slider-dwell-time">Dwell Time</label>
-                <span id="val-dwell-time">600ms</span>
+                <span id="val-dwell-time">2000ms</span>
               </div>
-              <input type="range" id="slider-dwell-time" min="200" max="1500" step="50" value="600">
+              <input type="range" id="slider-dwell-time" min="500" max="5000" step="100" value="2000">
+              <small style="color: #6b7280; font-size: 11px; margin-top: 4px; display: block;">
+                Hold cursor on element for this long to click (10s default)
+              </small>
             </div>
           </div>
         </div>
@@ -101,13 +112,15 @@
             <span class="error-icon">⚠️</span>
             <p class="error-title">Permission Required</p>
           </div>
-          <p class="error-text">Chrome restricts camera permission prompts inside side panels. Please grant access using the button below:</p>
+          <p class="error-text">Chrome restricts camera permission prompts inside side panels. Please grant access using
+            the button below:</p>
           <button id="btn-grant-permission" class="btn-primary">Grant Camera Permission</button>
         </div>
       </div>
     </main>
   </div>
   <script src="human.js"></script>
-  <script src="sidepanel.js"></script>
+  <script type="module" src="sidepanel.js"></script>
 </body>
+
 </html>

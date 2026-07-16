@@ -1,6 +1,3 @@
-// Side Panel Javascript - Face Navigator Core
-
-// One Euro Filter implementation for noise-free cursor control
 class LowPassFilter {
   constructor(alpha) {
     this.alpha = alpha;
@@ -46,7 +43,7 @@ class OneEuroFilter {
 
     if (this.lastTime !== null && timestamp !== null) {
       const dt = (timestamp - this.lastTime) / 1000.0;
-      if (dt > 0.0001) { // Avoid division by zero or extremely small intervals
+      if (dt > 0.0001) {
         this.freq = 1.0 / dt;
       }
     }
@@ -56,7 +53,7 @@ class OneEuroFilter {
     const dvalue = lastX === null || isNaN(lastX) ? 0.0 : (value - lastX) * this.freq;
     const edvalue = this.dx.filter(dvalue, this.alpha(this.dcutoff));
     const cutoff = this.mincutoff + this.beta * Math.abs(edvalue);
-    
+
     const result = this.x.filter(value, this.alpha(cutoff));
     return isNaN(result) ? value : result;
   }
@@ -69,25 +66,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   const placeholder = document.getElementById('camera-placeholder');
   const errorCard = document.getElementById('error-card');
   const btnGrantPermission = document.getElementById('btn-grant-permission');
-  
+
   const btnCalibrate = document.getElementById('btn-calibrate');
   const calibrationStatus = document.getElementById('calibration-status');
-  
+
   // Settings Toggles
   const toggleNavigation = document.getElementById('toggle-navigation');
   const toggleAimAssist = document.getElementById('toggle-aim-assist');
   const toggleClicking = document.getElementById('toggle-clicking');
   const toggleScroll = document.getElementById('toggle-scroll');
-  
+  const toggleVoice = document.getElementById("toggle-voice");
+
   // Settings Sliders
   const sliderSensitivity = document.getElementById('slider-sensitivity');
   const sliderFilter = document.getElementById('slider-filter');
   const sliderSnapRadius = document.getElementById('slider-snap-radius');
-  
+  const sliderDwellTime = document.getElementById('slider-dwell-time');
+
   // Slider Value Readouts
   const valSensitivity = document.getElementById('val-sensitivity');
   const valFilter = document.getElementById('val-filter');
   const valSnapRadius = document.getElementById('val-snap-radius');
+  const valDwellTime = document.getElementById('val-dwell-time');
+
+  // Set initial values - Dwell time default 20000ms (20 seconds)
+  sliderDwellTime.value = 2000;
+  valDwellTime.textContent = '2000ms';
 
   let activeStream = null;
   let human = null;
@@ -99,21 +103,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   let calibratedBounds = null;
 
   // One Euro Filters for X & Y coordinates
-  // Low mincutoff = very smooth, high beta = snappy response to intentional movement
   const filterX = new OneEuroFilter(30, 0.08, 0.4, 1.0);
   const filterY = new OneEuroFilter(30, 0.08, 0.4, 1.0);
 
-  const sliderDwellTime = document.getElementById('slider-dwell-time');
-  const valDwellTime = document.getElementById('val-dwell-time');
-
   // Synchronise slider readout texts
-  sliderSensitivity.addEventListener('input', () => { valSensitivity.textContent = `${sliderSensitivity.value}x`; syncConfig(); });
-  sliderFilter.addEventListener('input', () => { valFilter.textContent = sliderFilter.value; syncConfig(); });
-  sliderSnapRadius.addEventListener('input', () => { valSnapRadius.textContent = `${sliderSnapRadius.value}px`; syncConfig(); });
-  sliderDwellTime.addEventListener('input', () => { valDwellTime.textContent = `${sliderDwellTime.value}ms`; syncConfig(); });
-  
-  [toggleNavigation, toggleAimAssist, toggleClicking, toggleScroll].forEach(ctrl => {
-    ctrl.addEventListener('change', syncConfig);
+  sliderSensitivity.addEventListener('input', () => {
+    valSensitivity.textContent = `${sliderSensitivity.value}x`;
+    syncConfig();
+  });
+
+  sliderFilter.addEventListener('input', () => {
+    valFilter.textContent = sliderFilter.value;
+    syncConfig();
+  });
+
+  sliderSnapRadius.addEventListener('input', () => {
+    valSnapRadius.textContent = `${sliderSnapRadius.value}px`;
+    syncConfig();
+  });
+
+  sliderDwellTime.addEventListener('input', () => {
+    valDwellTime.textContent = `${sliderDwellTime.value}ms`;
+    syncConfig();
+  });
+
+  [
+    toggleNavigation,
+    toggleAimAssist,
+    toggleClicking,
+    toggleScroll,
+    toggleVoice
+  ].forEach(ctrl => {
+    ctrl.addEventListener("change", syncConfig);
   });
 
   // Open grant permission tab
@@ -135,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     face: {
       enabled: true,
       detector: { enabled: true, return: true, rotation: true },
-      mesh: { enabled: true }, // Enabled to detect mouth opening
+      mesh: { enabled: true },
       iris: { enabled: false },
       description: { enabled: false },
       emotion: { enabled: false }
@@ -153,12 +174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     human = new HumanClass(humanConfig);
     console.log("Human.js instantiated successfully.");
-    
-    // Preload models
+
     await human.load();
     console.log("Human.js models loaded.");
-    
-    // Auto-start webcam
+
     await startCamera();
   } catch (err) {
     console.error("Initialization error:", err);
@@ -170,7 +189,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function startCamera() {
     try {
       errorCard.classList.add('hidden');
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
         audio: false
@@ -182,11 +201,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         canvasElement.width = videoElement.videoWidth;
         canvasElement.height = videoElement.videoHeight;
         placeholder.classList.add('hidden');
-        
+
         if (!isDetecting) {
           isDetecting = true;
           detectFrame();
-          startCalibration(); // Auto-start calibration on load
+          startCalibration();
         }
       };
     } catch (error) {
@@ -207,25 +226,46 @@ document.addEventListener('DOMContentLoaded', async () => {
           isAimAssistEnabled: toggleAimAssist.checked,
           isClickingEnabled: toggleClicking.checked,
           isScrollEnabled: toggleScroll.checked
-        }).catch(() => {});
+        }).catch(() => { });
       }
     });
   }
 
-  // Cache the active tab ID to prevent spamming the heavy chrome.tabs.query API 60 times a second
+  toggleVoice.addEventListener("change", () => {
+
+    chrome.tabs.query(
+        { active: true, currentWindow: true },
+        (tabs) => {
+
+            if (!tabs.length) return;
+
+            chrome.tabs.sendMessage(
+                tabs[0].id,
+                {
+                    action: "voice_toggle",
+                    enabled: toggleVoice.checked
+                }
+            );
+
+        }
+    );
+
+});
+
+  // Cache the active tab ID
   let activeTabId = null;
   function updateActiveTab() {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs && tabs[0]) activeTabId = tabs[0].id;
     });
   }
-  updateActiveTab(); // Initial fetch
+  updateActiveTab();
 
   chrome.tabs.onActivated.addListener(() => {
     updateActiveTab();
     setTimeout(syncConfig, 500);
   });
-  
+
   chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (changeInfo.status === 'complete') {
       updateActiveTab();
@@ -233,7 +273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Start the step-by-step calibration countdown
+  // Start calibration
   function startCalibration() {
     isCalibrating = true;
     calibBounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
@@ -249,8 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let currentStep = 0;
     let countdown = steps[currentStep].duration;
-    
-    // Initial display
+
     calibrationStatus.textContent = `${steps[currentStep].text}... ${countdown}s`;
 
     const timer = setInterval(() => {
@@ -265,8 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           clearInterval(timer);
           isCalibrating = false;
-          
-          // Finalize bounds
+
           calibratedBounds = { ...calibBounds };
 
           btnCalibrate.disabled = false;
@@ -287,11 +325,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     try {
       const result = await human.detect(videoElement);
-      
-      // Clear overlay canvas
+
       ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-      // Draw dotted target calibration ring
+      // Draw target ring
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 6]);
@@ -303,13 +340,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (result.face && result.face.length > 0 && result.face[0].score > 0.6) {
         lastFaceTime = performance.now();
         const face = result.face[0];
-        
-        // Bounding box draw
+
         ctx.strokeStyle = '#a855f7';
         ctx.lineWidth = 3;
         ctx.strokeRect(face.box[0], face.box[1], face.box[2], face.box[3]);
 
-        // Draw nose point indicator (center of face box)
         const curCenterX = face.box[0] + face.box[2] / 2;
         const curCenterY = face.box[1] + face.box[3] / 2;
 
@@ -318,9 +353,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         ctx.arc(curCenterX, curCenterY, 6, 0, 2 * Math.PI);
         ctx.fill();
 
-        // Extract tracking coordinates: Rotation-dominant mapping
-        // Prioritises head tilt/rotation over physical translation
-        // This lets the user control the cursor with tiny head tilts (less neck strain)
         let posX = curCenterX / canvasElement.width;
         let posY = curCenterY / canvasElement.height;
         let rotX = 0;
@@ -331,52 +363,48 @@ document.addEventListener('DOMContentLoaded', async () => {
           rotY = face.rotation.angle.pitch;
         }
 
-        // 90% rotation + 10% position: minimal head movement needed
-        let rawTrackX = posX * 0.1 + rotX * 0.9;
-        let rawTrackY = posY * 0.1 + rotY * 0.9;
+        let rawTrackX = posX * 0.65 + rotX * 0.35;
+        let rawTrackY = posY * 0.65 + rotY * 0.35;
 
         if (isNaN(rawTrackX) || isNaN(rawTrackY)) {
           rawTrackX = 0.5;
           rawTrackY = 0.5;
         }
 
-        // Mouth Opening Detection for Clicking
+        // Mouth Opening Detection
         if (face.mesh && face.mesh.length > 15) {
           const upperLip = face.mesh[13];
           const lowerLip = face.mesh[14];
           if (upperLip && lowerLip) {
             const mouthDist = Math.abs(upperLip[1] - lowerLip[1]);
             const faceHeight = face.box[3];
-            
-            // If mouth is open enough (threshold ~0.12 of face height) and cooldown elapsed
+
             if (mouthDist / faceHeight > 0.12) {
               if (typeof window.lastMouthClickTime === 'undefined') window.lastMouthClickTime = 0;
               const now = performance.now();
               if (now - window.lastMouthClickTime > 1200) {
                 window.lastMouthClickTime = now;
-                
-                // Visual indicator for mouth click in the sidepanel
-                ctx.fillStyle = '#f59e0b'; // Amber
+
+                ctx.fillStyle = '#f59e0b';
                 ctx.beginPath();
                 ctx.arc(curCenterX, curCenterY + 20, 10, 0, 2 * Math.PI);
                 ctx.fill();
 
                 if (toggleNavigation.checked && toggleClicking.checked && activeTabId) {
-                  chrome.tabs.sendMessage(activeTabId, { action: 'mouth_click' }).catch(() => {});
+                  chrome.tabs.sendMessage(activeTabId, { action: 'mouth_click' }).catch(() => { });
                 }
               }
             }
           }
         }
 
-        // Set bounds if calibrating or not yet calibrated
+        // Calibration bounds
         if (isCalibrating) {
           if (rawTrackX < calibBounds.minX) calibBounds.minX = rawTrackX;
           if (rawTrackX > calibBounds.maxX) calibBounds.maxX = rawTrackX;
           if (rawTrackY < calibBounds.minY) calibBounds.minY = rawTrackY;
           if (rawTrackY > calibBounds.maxY) calibBounds.maxY = rawTrackY;
         } else if (calibratedBounds === null) {
-          // Fallback if somehow never calibrated, just use center with small arbitrary bounds
           calibratedBounds = {
             minX: rawTrackX - 0.1,
             maxX: rawTrackX + 0.1,
@@ -392,37 +420,28 @@ document.addEventListener('DOMContentLoaded', async () => {
           let rangeX = calibratedBounds.maxX - calibratedBounds.minX;
           let rangeY = calibratedBounds.maxY - calibratedBounds.minY;
 
-          // Prevent hyper-sensitivity if they didn't move enough during calibration
-          if (rangeX < 0.15) rangeX = 0.15;
-          if (rangeY < 0.15) rangeY = 0.15;
+          if (rangeX < 0.25) rangeX = 0.25;
+          if (rangeY < 0.25) rangeY = 0.25;
 
-          // Apply sensitivity modifier (Range Multiplier) to shrink or expand the effective box
-          const sensitivity = parseFloat(sliderSensitivity.value); // default 1.0
+          const sensitivity = parseFloat(sliderSensitivity.value);
           const scaleMultiplier = 1.0 / sensitivity;
-          
+
           rangeX *= scaleMultiplier;
           rangeY *= scaleMultiplier;
 
-          // Center of bounds
           const centerX = (calibratedBounds.minX + calibratedBounds.maxX) / 2;
           const centerY = (calibratedBounds.minY + calibratedBounds.maxY) / 2;
 
-          // Calculate normalized position (-0.5 to 0.5)
-          // Invert X axis to fix mirrored webcam tracking direction
           let normX = -(rawTrackX - centerX) / rangeX;
           let normY = (rawTrackY - centerY) / rangeY;
 
-          // --- Deadzone: ignore micro-jitter near center ---
-          const DEADZONE = 0.015;
+          const DEADZONE = 0.08;
           if (Math.abs(normX) < DEADZONE) normX = 0;
           else normX = normX > 0 ? normX - DEADZONE : normX + DEADZONE;
           if (Math.abs(normY) < DEADZONE) normY = 0;
           else normY = normY > 0 ? normY - DEADZONE : normY + DEADZONE;
 
-          // --- Non-linear acceleration curve ---
-          // Small head tilts get amplified (power < 1 = amplify small values)
-          // This means you barely need to move your head to cover the full screen
-          const ACCEL_CURVE = 0.55; // lower = more amplification of small movements
+          const ACCEL_CURVE = 0.9;
           normX = Math.sign(normX) * Math.pow(Math.abs(normX), ACCEL_CURVE);
           normY = Math.sign(normY) * Math.pow(Math.abs(normY), ACCEL_CURVE);
 
@@ -430,20 +449,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           targetY = 0.5 + normY;
         }
 
-        // One Euro Filter — adaptive smoothing
         const fc = parseFloat(sliderFilter.value);
-        const beta = 0.5 + fc * 5.0; // High beta = snappy response to intentional moves
+        const beta = 0.5 + fc * 5.0;
         const timestamp = performance.now();
 
-        // Filter the output coordinates
         const filteredX = filterX.filter(targetX, fc, beta, timestamp);
         const filteredY = filterY.filter(targetY, fc, beta, timestamp);
 
-        // Clamp values to viewport bounds
         const finalX = Math.max(0, Math.min(1, filteredX));
         const finalY = Math.max(0, Math.min(1, filteredY));
 
-        // Draw cursor path line on canvas
+        // Draw cursor path
         ctx.strokeStyle = '#6366f1';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -451,16 +467,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         ctx.lineTo(curCenterX, curCenterY);
         ctx.stroke();
 
-        // Dispatch cursor coordinate updates to the active webpage
         if (toggleNavigation.checked && activeTabId) {
           chrome.tabs.sendMessage(activeTabId, {
             action: 'move_cursor',
             x: finalX,
             y: finalY
-          }).catch(() => {});
+          }).catch(() => { });
         }
       } else {
-        // Draw warning text if face is lost
         ctx.fillStyle = '#ef4444';
         ctx.font = '500 14px "Plus Jakarta Sans"';
         ctx.textAlign = 'center';
@@ -472,15 +486,17 @@ document.addEventListener('DOMContentLoaded', async () => {
               action: 'move_cursor',
               x: 0.5,
               y: 0.5
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
       }
     } catch (err) {
       console.error("Frame detection failed:", err);
     } finally {
-      // ALWAYS schedule next frame - never let the loop die
       requestAnimationFrame(detectFrame);
     }
   }
+
+  // Send initial config on load
+  setTimeout(syncConfig, 1000);
 });

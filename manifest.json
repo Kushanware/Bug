@@ -4,11 +4,12 @@
   "version": "1.0.0",
   "description": "A minimal Chrome Extension that opens a right panel (Side Panel).",
   "permissions": [
-    "sidePanel",
-    "tabs",
-    "activeTab",
-    "scripting"
-  ],
+  "sidePanel",
+  "tabs",
+  "activeTab",
+  "scripting",
+  "storage"
+],
   "host_permissions": [
     "<all_urls>"
   ],

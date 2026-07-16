@@ -1,5 +1,3 @@
-// Content Script for Face Navigator Cursor Control
-
 (function () {
   // Prevent duplicate injection
   if (window.hasFaceNavigatorInjected) return;
@@ -7,7 +5,7 @@
 
   console.log("Face Navigator content script loaded.");
 
-  // Visual Feedback - Edge Glow (replaces the solid red border)
+  // Visual Feedback - Edge Glow
   const edgeGlow = document.createElement('div');
   edgeGlow.style.cssText = "position: fixed; inset: 0; pointer-events: none; z-index: 2147483639; box-shadow: inset 0 0 20px rgba(168, 85, 247, 0.4); border: 2px solid rgba(168, 85, 247, 0.5); opacity: 1; transition: opacity 0.5s;";
 
@@ -19,23 +17,23 @@
       position: fixed !important;
       width: 14px !important;
       height: 14px !important;
-      background-color: #ef4444 !important; /* Red main cursor */
+      background-color: #ef4444 !important;
       border: 2px solid #ffffff !important;
       border-radius: 50% !important;
       pointer-events: none !important;
       z-index: 2147483647 !important;
       box-shadow: 0 0 8px rgba(239, 68, 68, 0.8);
-      transition: transform 0.08s cubic-bezier(0.1, 0.8, 0.2, 1);
+      transition: none !important;
       transform: translate(-50%, -50%);
-      left: 0;
-      top: 0;
+      left: 50%;
+      top: 50%;
     }
     
     #face-navigator-snap-indicator {
       position: fixed;
       width: 28px;
       height: 28px;
-      background-color: rgba(59, 130, 246, 0.25); /* Blue secondary cursor */
+      background-color: rgba(59, 130, 246, 0.25);
       border: 2px solid rgba(59, 130, 246, 0.7);
       border-radius: 50%;
       pointer-events: none;
@@ -56,8 +54,8 @@
       pointer-events: none;
       z-index: 2147483646;
       transform: translate(-50%, -50%);
-      left: 0;
-      top: 0;
+      left: 50%;
+      top: 50%;
       transition: width 0.05s, height 0.05s, border-color 0.1s;
     }
 
@@ -144,7 +142,12 @@
   navRightZone.id = 'fn-nav-right';
   navRightZone.className = 'fn-nav-zone';
 
-  // Ensure documentElement exists before appending UI elements
+  const SpeechRecognition =
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
+  let recognition = null;
+  let voiceRunning = false;
+
   function initUI() {
     if (!document.documentElement) {
       setTimeout(initUI, 50);
@@ -162,7 +165,7 @@
   }
   initUI();
 
-  // State Variables
+  // State Variables - Start at center
   let targetX = window.innerWidth / 2;
   let targetY = window.innerHeight / 2;
   let curX = targetX;
@@ -172,40 +175,37 @@
   let dwellStartTime = 0;
   let clickCooldown = false;
   let lastScrollTime = 0;
-  
+
   let navZoneActive = null;
   let navDwellStartTime = 0;
   let navCooldown = false;
 
-  // Configuration (received from sidepanel)
-  let sensitivityRadius = 45; // px for aim assist snap
-  let dwellTimeMs = 600;
+  // Configuration
+  let sensitivityRadius = 45;
+  let dwellTimeMs = 2000;
   let isAimAssistEnabled = true;
   let isClickingEnabled = true;
   let isScrollEnabled = true;
 
-  // Gesture Recognition State
-  let pathHistory = [];
-
-  // Track clickable targets in viewport
+  // Track clickable targets
   let clickableElements = [];
   function refreshClickables() {
     clickableElements = [];
     const selectors = [
-      'a', 'button', 'input', 'select', 'textarea', 
+      'a', 'button', 'input', 'select', 'textarea',
       '[role="button"]', '[role="link"]', '[role="checkbox"]',
       '[onclick]', '.btn', '.button'
     ];
-    
+
     selectors.forEach(selector => {
       document.querySelectorAll(selector).forEach(el => {
         const rect = el.getBoundingClientRect();
         if (
-          rect.width > 0 && 
-          rect.height > 0 && 
-          rect.top < window.innerHeight && 
-          rect.bottom > 0 && 
-          rect.left < window.innerWidth && 
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.top < window.innerHeight &&
+          rect.bottom > 0 &&
+          rect.left < window.innerWidth &&
           rect.right > 0
         ) {
           const computedStyle = window.getComputedStyle(el);
@@ -217,11 +217,9 @@
     });
   }
 
-  // Refresh targets periodically
   refreshClickables();
   setInterval(refreshClickables, 1000);
 
-  // Find nearest clickable target in viewport
   function getNearestTarget(x, y) {
     if (!isAimAssistEnabled) return null;
     let nearest = null;
@@ -230,7 +228,7 @@
     clickableElements.forEach(item => {
       const elCenterX = item.rect.left + item.rect.width / 2;
       const elCenterY = item.rect.top + item.rect.height / 2;
-      
+
       const dx = x - elCenterX;
       const dy = y - elCenterY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -244,7 +242,6 @@
     return nearest;
   }
 
-  // Handle dwell timer for clicking
   function handleDwell(snappedTarget) {
     if (clickCooldown || !isClickingEnabled) return;
 
@@ -252,15 +249,15 @@
       if (snappedTarget.element === lastTarget) {
         if (dwellStartTime === 0) dwellStartTime = performance.now();
         const elapsed = performance.now() - dwellStartTime;
-        
-        // Shrink outer ring to visualise click progress
+
+        // Visual progress ring
         const progress = Math.min(elapsed / dwellTimeMs, 1);
         const ringSize = 32 - (32 - 14) * progress;
-        
         ring.style.width = `${ringSize}px`;
         ring.style.height = `${ringSize}px`;
         ring.style.borderColor = `rgba(168, 85, 247, ${0.4 + 0.6 * progress})`;
 
+        // Only trigger click after 10 seconds
         if (elapsed >= dwellTimeMs) {
           triggerClick(snappedTarget.element);
         }
@@ -273,17 +270,16 @@
   }
 
   function resetDwell(newTarget) {
-    // Remove old highlight outline
     if (lastTarget && lastTarget !== newTarget) {
       lastTarget.classList.remove('face-nav-highlight');
     }
-    
+
     dwellStartTime = 0;
     lastTarget = newTarget;
     ring.style.width = '32px';
     ring.style.height = '32px';
     ring.style.borderColor = 'rgba(168, 85, 247, 0.4)';
-    
+
     if (newTarget) {
       newTarget.classList.add('face-nav-highlight');
     }
@@ -295,10 +291,8 @@
       clickCooldown = true;
       dwellStartTime = 0;
 
-      // Remove active highlight
       element.classList.remove('face-nav-highlight');
 
-      // Trigger visual flash at the click coordinates
       let clickX = curX;
       let clickY = curY;
       if (element && element.getBoundingClientRect) {
@@ -306,14 +300,13 @@
         clickX = rect.left + rect.width / 2;
         clickY = rect.top + rect.height / 2;
       }
-      
+
       flash.style.left = `${clickX}px`;
       flash.style.top = `${clickY}px`;
       flash.style.animation = 'none';
-      void flash.offsetWidth; // Force layout recalculation
+      void flash.offsetWidth;
       flash.style.animation = 'face-nav-flash-anim 0.4s ease-out';
 
-      // Click the element
       if (typeof element.click === 'function') {
         element.click();
       } else {
@@ -324,20 +317,17 @@
       console.error('Face Navigator: triggerClick error', err);
     }
 
-    // Cooldown before next click is possible
     setTimeout(() => {
       clickCooldown = false;
     }, 1500);
   }
 
-  // Handle smooth page scrolling at page borders
   function handleEdgeScroll(y) {
     if (!isScrollEnabled) return;
-    
+
     const scrollZone = 180;
-    const maxSpeed = 16;
-    
-    // Update visual gradients
+    const maxSpeed = 4;
+
     if (y < scrollZone) {
       scrollTopZone.style.opacity = '1';
       scrollBottomZone.style.opacity = '0';
@@ -363,16 +353,14 @@
     }
   }
 
-  // Handle Edge Browser Navigation
   function handleBrowserNav(x) {
     const navZone = 80;
     const now = performance.now();
-    
+
     let currentZone = null;
     if (x < navZone) currentZone = 'back';
     else if (x > window.innerWidth - navZone) currentZone = 'forward';
 
-    // Visuals
     navLeftZone.style.opacity = currentZone === 'back' ? '1' : '0';
     navRightZone.style.opacity = currentZone === 'forward' ? '1' : '0';
 
@@ -404,7 +392,7 @@
       if (p.y < minY) minY = p.y;
       if (p.y > maxY) maxY = p.y;
     }
-    
+
     const width = maxX - minX;
     const height = maxY - minY;
 
@@ -413,18 +401,18 @@
 
     const centerX = minX + width / 2;
     const centerY = minY + height / 2;
-    
+
     let cumulativeAngle = 0;
     let prevAngle = Math.atan2(pathHistory[0].y - centerY, pathHistory[0].x - centerX);
 
     for (let i = 1; i < pathHistory.length; i++) {
       const angle = Math.atan2(pathHistory[i].y - centerY, pathHistory[i].x - centerX);
       let dTheta = angle - prevAngle;
-      
+
       // Normalize to handle -PI to PI wrap-around
       if (dTheta > Math.PI) dTheta -= 2 * Math.PI;
       if (dTheta < -Math.PI) dTheta += 2 * Math.PI;
-      
+
       cumulativeAngle += dTheta;
       prevAngle = angle;
     }
@@ -432,7 +420,7 @@
     // Trigger if almost a full circle (360 degrees = ~6.28 radians)
     if (Math.abs(cumulativeAngle) > 5.5) {
       pathHistory = []; // Prevent double trigger
-      
+
       // Show big blue flash in the center of the screen
       flash.style.borderColor = '#3b82f6';
       flash.style.left = `${window.innerWidth / 2}px`;
@@ -440,7 +428,7 @@
       flash.style.animation = 'none';
       void flash.offsetWidth;
       flash.style.animation = 'face-nav-flash-anim 0.6s ease-out';
-      
+
       // Navigate to Google
       setTimeout(() => {
         window.location.href = "https://www.google.com/";
@@ -448,75 +436,160 @@
     }
   }
 
-  // Linear interpolation for smooth cursor physics
+  // Smooth cursor physics - responsive but smooth
   function updateCursorPhysics() {
-    // Safety check against NaN which would hide the cursor
-    if (isNaN(curX) || isNaN(targetX)) { curX = window.innerWidth / 2; targetX = curX; }
-    if (isNaN(curY) || isNaN(targetY)) { curY = window.innerHeight / 2; targetY = curY; }
+    if (!window.cursorInitialized) {
+      curX = window.innerWidth / 2;
+      curY = window.innerHeight / 2;
+      targetX = curX;
+      targetY = curY;
+      window.cursorInitialized = true;
+    }
+    if (isNaN(curX) || isNaN(targetX)) {
+      curX = window.innerWidth / 2;
+      targetX = curX;
+    }
+    if (isNaN(curY) || isNaN(targetY)) {
+      curY = window.innerHeight / 2;
+      targetY = curY;
+    }
 
-    // Adaptive smoothing: faster when cursor is far from target, slower when close
-    // This makes the cursor feel snappy for big movements but buttery for small ones
+    // Faster response - higher lerp for quicker movement
     const dx = targetX - curX;
     const dy = targetY - curY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const screenDiag = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2);
-    const normalizedDist = dist / screenDiag; // 0 to ~1
+    const normalizedDist = dist / screenDiag;
 
-    // Base lerp 0.12 (smooth), ramps up to 0.35 for large distances
-    const lerpAlpha = 0.12 + normalizedDist * 0.23;
+    // More responsive: 0.15 base, up to 0.45 for large distances
+    const lerpAlpha = 0.05 + normalizedDist * 0.10;
 
     curX += dx * lerpAlpha;
     curY += dy * lerpAlpha;
 
-    // Main cursor ALWAYS tracks freely (never jumps)
+    // Update cursor position
     cursor.style.left = `${curX}px`;
     cursor.style.top = `${curY}px`;
 
-    // Apply snap target (Aim Assist)
-    const snapped = getNearestTarget(curX, curY);
+    // Aim assist
+    let snapped = null;
+
+    if (isAimAssistEnabled) {
+      snapped = getNearestTarget(curX, curY);
+    }
 
     if (snapped) {
-      // Show secondary snap indicator on the target
       snapIndicator.style.opacity = '1';
       snapIndicator.style.left = `${snapped.x}px`;
       snapIndicator.style.top = `${snapped.y}px`;
-      
-      // Ring follows the snapped target
+
       ring.style.left = `${snapped.x}px`;
       ring.style.top = `${snapped.y}px`;
-      
+
       handleDwell(snapped);
     } else {
-      // Hide secondary indicator
       snapIndicator.style.opacity = '0';
-      
-      // Ring follows the main free cursor
       ring.style.left = `${curX}px`;
       ring.style.top = `${curY}px`;
-      
       handleDwell(null);
     }
 
-    // Process edge actions
     handleEdgeScroll(curY);
     handleBrowserNav(curX);
-
-    // Track path for gesture recognition (keep last 1.5 seconds)
-    const now = performance.now();
-    pathHistory.push({ x: curX, y: curY, time: now });
-    while (pathHistory.length > 0 && now - pathHistory[0].time > 1500) {
-      pathHistory.shift();
-    }
-    detectGesture();
 
     requestAnimationFrame(updateCursorPhysics);
   }
 
-  // Run the physics loop
+  function startVoiceRecognition() {
+    if (!SpeechRecognition) {
+      alert("Speech Recognition not supported");
+      return;
+    }
+    if (voiceRunning) return;
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.onstart = () => {
+      voiceRunning = true;
+      console.log("Voice Started");
+    };
+    recognition.onresult = (event) => {
+      const command = event.results[event.results.length - 1][0].transcript
+        .trim()
+        .toLowerCase();
+      console.log(command);
+      handleVoiceCommand(command);
+    };
+    recognition.onend = () => {
+      if (voiceRunning) {
+        recognition.start();
+      }
+    };
+    recognition.onerror = (e) => {
+      console.log(e.error);
+    };
+    recognition.start();
+  }
+
+  function stopVoiceRecognition() {
+    voiceRunning = false;
+    if (recognition) {
+      recognition.stop();
+      recognition = null;
+    }
+  }
+
+  function handleVoiceCommand(command) {
+    console.log("Executing:", command);
+    if (command.includes("scroll down")) {
+      window.scrollBy({
+        top: 500,
+        behavior: "smooth"
+      });
+    }
+    else if (command.includes("scroll up")) {
+      window.scrollBy({
+        top: -500,
+        behavior: "smooth"
+      });
+    }
+    else if (command.includes("scroll top")) {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+      });
+    }
+    else if (command.includes("scroll bottom")) {
+      window.scrollTo({
+        top: document.body.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+    else if (command.includes("click")) {
+      const snapped = getNearestTarget(curX, curY);
+      const target =
+        snapped
+          ? snapped.element
+          : document.elementFromPoint(curX, curY);
+      if (target) {
+        triggerClick(target);
+      }
+    }
+    else if (command.includes("back")) {
+      history.back();
+    }
+    else if (command.includes("reload")) {
+      location.reload();
+    }
+  }
+
+  // Start physics loop
   requestAnimationFrame(updateCursorPhysics);
 
-  // Listen for navigation and coordinate updates from the extension sidepanel
+  // Message listener for sidepanel
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    console.log("Message Received:", message);
     try {
       if (message.action === 'move_cursor') {
         targetX = message.x * window.innerWidth;
@@ -529,16 +602,21 @@
         isScrollEnabled = message.isScrollEnabled !== undefined ? message.isScrollEnabled : isScrollEnabled;
       } else if (message.action === 'mouth_click') {
         if (!isClickingEnabled) return true;
-        // Find element under cursor and click
         const snapped = getNearestTarget(curX, curY);
         const targetElement = snapped ? snapped.element : document.elementFromPoint(curX, curY);
         if (targetElement) {
           triggerClick(targetElement);
         }
+      } else if (message.action === "voice_toggle") {
+        if (message.enabled) {
+          startVoiceRecognition();
+        } else {
+          stopVoiceRecognition();
+        }
       }
     } catch (err) {
       console.error('Face Navigator: message handler error', err);
     }
-    return true; // Keep message channel open
+    return;
   });
 })();

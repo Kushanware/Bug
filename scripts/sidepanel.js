@@ -87,7 +87,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Settings Toggles
   const toggleNavigation = document.getElementById('toggle-navigation');
   const toggleAimAssist = document.getElementById('toggle-aim-assist');
-  const toggleClicking = document.getElementById('toggle-clicking');
+  const toggleDwellClicking = document.getElementById('toggle-dwell-clicking');
+  const toggleMouthClicking = document.getElementById('toggle-mouth-clicking');
   const toggleScroll = document.getElementById('toggle-scroll');
   const toggleVoice = document.getElementById("toggle-voice");
 
@@ -133,7 +134,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   [
     toggleNavigation,
     toggleAimAssist,
-    toggleClicking,
+    toggleDwellClicking,
+    toggleMouthClicking,
     toggleScroll
   ].forEach(ctrl => {
     ctrl.addEventListener("change", syncConfig);
@@ -171,6 +173,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Human.js AI
   const humanConfig = {
     backend: 'webgl',
+    cacheSensitivity: 0,
     modelBasePath: '../models/',
     face: {
       enabled: true,
@@ -245,8 +248,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           action: 'config',
           sensitivityRadius: parseFloat(sliderSnapRadius.value),
           isAimAssistEnabled: toggleAimAssist.checked,
-          isClickingEnabled: toggleClicking.checked,
-          isScrollEnabled: toggleScroll.checked
+          isDwellClickingEnabled: toggleDwellClicking.checked,
+          isMouthClickingEnabled: toggleMouthClicking.checked,
+          isScrollEnabled: toggleScroll.checked,
+          isNavigationEnabled: toggleNavigation.checked,
+          isVoiceEnabled: toggleVoice.checked
         }).catch(() => { });
       }
     });
@@ -320,6 +326,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Detect loop
   let lastFaceTime = performance.now();
+
   async function detectFrame() {
     if (!isDetecting) return;
 
@@ -368,8 +375,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           rotY = face.rotation.angle.pitch;
         }
 
-        let rawTrackX = posX * 0.65 + rotX * 0.35;
-        let rawTrackY = posY * 0.65 + rotY * 0.35;
+        // Use 100% rotation for cursor movement to reduce neck stress
+        let rawTrackX = rotX;
+        let rawTrackY = rotY;
 
         if (isNaN(rawTrackX) || isNaN(rawTrackY)) {
           rawTrackX = 0.5;
@@ -381,10 +389,12 @@ document.addEventListener('DOMContentLoaded', async () => {
           const upperLip = face.mesh[13];
           const lowerLip = face.mesh[14];
           if (upperLip && lowerLip) {
-            const mouthDist = Math.abs(upperLip[1] - lowerLip[1]);
+            const upperY = upperLip.y !== undefined ? upperLip.y : upperLip[1];
+            const lowerY = lowerLip.y !== undefined ? lowerLip.y : lowerLip[1];
+            const mouthDist = Math.abs(upperY - lowerY);
             const faceHeight = face.box[3];
 
-            if (mouthDist / faceHeight > 0.12) {
+            if (mouthDist / faceHeight > 0.08) {
               if (typeof window.lastMouthClickTime === 'undefined') window.lastMouthClickTime = 0;
               const now = performance.now();
               if (now - window.lastMouthClickTime > 1200) {
@@ -403,7 +413,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                   }
                 }, 500);
 
-                if (toggleNavigation.checked && toggleClicking.checked && activeTabId) {
+                if (toggleNavigation.checked && toggleMouthClicking.checked && activeTabId) {
                   chrome.tabs.sendMessage(activeTabId, { action: 'mouth_click' }).catch(() => { });
                 }
               }
@@ -433,8 +443,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           let rangeX = calibratedBounds.maxX - calibratedBounds.minX;
           let rangeY = calibratedBounds.maxY - calibratedBounds.minY;
 
-          if (rangeX < 0.25) rangeX = 0.25;
-          if (rangeY < 0.25) rangeY = 0.25;
+          if (rangeX < 0.10) rangeX = 0.10;
+          if (rangeY < 0.10) rangeY = 0.10;
 
           const sensitivity = parseFloat(sliderSensitivity.value);
           const scaleMultiplier = 1.0 / sensitivity;
@@ -517,4 +527,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Send initial config on load
   setTimeout(syncConfig, 1000);
+
+  // Heartbeat to keep content script active
+  setInterval(() => {
+    if (activeTabId) {
+      chrome.tabs.sendMessage(activeTabId, { action: 'heartbeat' }).catch(() => {});
+    }
+  }, 1000);
 });

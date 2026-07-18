@@ -64,8 +64,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const canvasElement = document.getElementById('canvas-overlay');
   const ctx = canvasElement.getContext('2d');
   const placeholder = document.getElementById('camera-placeholder');
-  const errorCard = document.getElementById('error-card');
-  const btnGrantPermission = document.getElementById('btn-grant-permission');
 
   // HUD elements
   const hudElement = document.getElementById('system-hud');
@@ -132,7 +130,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   [
-    toggleNavigation,
     toggleAimAssist,
     toggleDwellClicking,
     toggleMouthClicking,
@@ -141,12 +138,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     ctrl.addEventListener("change", syncConfig);
   });
 
-  // Open grant permission tab
-  if (btnGrantPermission) {
-    btnGrantPermission.addEventListener('click', () => {
-      chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html') });
-    });
-  }
+  toggleNavigation.addEventListener("change", async () => {
+    syncConfig();
+    if (toggleNavigation.checked) {
+      if (!activeStream || !activeStream.active) {
+        await startCamera(true);
+      }
+    }
+  });
+
+  // Listen for permission granted message from the permission tab
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.action === 'permission_granted') {
+      console.log("Camera permission granted message received, starting camera...");
+      toggleNavigation.checked = true;
+      syncConfig();
+      startCamera();
+    }
+  });
 
   // Trigger calibration routine
   btnCalibrate.addEventListener('click', () => {
@@ -207,14 +216,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (err) {
     console.error("Initialization error:", err);
     placeholder.classList.remove('hidden');
-    errorCard.classList.remove('hidden');
   }
 
   // Start Camera Stream
-  async function startCamera() {
-    try {
-      errorCard.classList.add('hidden');
+  async function startCamera(userTriggered = false) {
+    if (activeStream && activeStream.active) {
+      return;
+    }
 
+    try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 640, height: 480 },
         audio: false
@@ -233,10 +243,34 @@ document.addEventListener('DOMContentLoaded', async () => {
           startCalibration();
         }
       };
+
+      // Check if this page was opened specifically to request permission
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('requestPermission') === 'true') {
+        chrome.runtime.sendMessage({ action: 'permission_granted' }, () => {
+          chrome.tabs.getCurrent((tab) => {
+            if (tab) {
+              chrome.tabs.remove(tab.id);
+            }
+          });
+        });
+      }
     } catch (error) {
       console.error('Error accessing camera:', error);
       placeholder.classList.remove('hidden');
-      errorCard.classList.remove('hidden');
+
+      // Set checkbox to false since camera failed to start (e.g. no permission yet)
+      toggleNavigation.checked = false;
+      syncConfig();
+
+      // If user explicitly toggled it ON, open a tab to request permission.
+      if (userTriggered) {
+        chrome.tabs.getCurrent((tab) => {
+          if (!tab) {
+            chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel/sidepanel.html?requestPermission=true') });
+          }
+        });
+      }
     }
   }
 

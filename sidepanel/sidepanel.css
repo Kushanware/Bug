@@ -120,7 +120,7 @@ body {
 .video-frame {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 16 / 9;
   background-color: #121215;
   border: 1px solid var(--border-color);
   border-radius: 12px;
@@ -449,6 +449,120 @@ body {
   font-size: 0.8rem;
   color: var(--text-secondary);
   line-height: 1.45;
+}
+
+/* Voice Command Log */
+.voice-log-section {
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.voice-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.voice-log-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.btn-clear-log {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.btn-clear-log:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.voice-log {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 0.35rem 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.voice-log::-webkit-scrollbar {
+  width: 4px;
+}
+
+.voice-log::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 4px;
+}
+
+.voice-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.voice-log-entry + .voice-log-entry {
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.voice-log-badge {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.voice-log-badge.badge-executed {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.voice-log-badge.badge-heard {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.voice-log-badge.badge-ignored {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.voice-log-text {
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-log-time {
+  flex-shrink: 0;
+  font-size: 0.6rem;
+  color: rgba(255, 255, 255, 0.25);
 }
 
 /* Helper Utilities */

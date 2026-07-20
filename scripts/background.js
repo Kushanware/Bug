@@ -38,5 +38,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.search.query({ text: query, disposition: 'NEW_TAB' });
     }
   }
+  // Forward voice_log from content script to sidepanel
+  if (message.action === 'voice_log' && sender.tab) {
+    // Re-broadcast to extension pages (sidepanel will pick this up)
+    chrome.runtime.sendMessage(message).catch(() => {});
+  }
   return false;
 });

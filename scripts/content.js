@@ -250,14 +250,20 @@
       navRightZone.style.opacity = '0';
     }
 
-    // Only stop voice if the user has explicitly disabled it
-    if (!isActive && voiceRunning && !isVoiceEnabled) {
+    // Bug fix #10: Stop voice recognition when panel is disconnected
+    if (!isActive && voiceRunning) {
       stopVoiceRecognition();
     }
   }
 
   updateUIVisibility();
-  setInterval(updateUIVisibility, 500);
+  const uiInterval = setInterval(() => {
+    if (window._bugActiveInstance !== INSTANCE_ID) {
+      clearInterval(uiInterval);
+      return;
+    }
+    updateUIVisibility();
+  }, 500);
 
   // Track clickable targets — Bug fix #7: store elements only, compute rects fresh
   let clickableElements = [];
@@ -280,7 +286,13 @@
   }
 
   refreshClickables();
-  setInterval(refreshClickables, 1000);
+  const clickablesInterval = setInterval(() => {
+    if (window._bugActiveInstance !== INSTANCE_ID) {
+      clearInterval(clickablesInterval);
+      return;
+    }
+    refreshClickables();
+  }, 1000);
 
   function getNearestTarget(x, y) {
     if (!isAimAssistEnabled) return null;
@@ -459,6 +471,7 @@
   // Bug fix #8: use instance-scoped flag instead of global window property
   let cursorInitialized = false;
   function updateCursorPhysics() {
+    if (window._bugActiveInstance !== INSTANCE_ID) return;
     if (!cursorInitialized) {
       curX = window.innerWidth / 2;
       curY = window.innerHeight / 2;
@@ -490,60 +503,69 @@
     cursor.style.left = `${curX}px`;
     cursor.style.top = `${curY}px`;
 
-    // Aim assist
-    let snapped = null;
-    if (isAimAssistEnabled) {
-      snapped = getNearestTarget(curX, curY);
-    }
-
-    if (snapped) {
-      snapIndicator.style.opacity = '1';
-      snapIndicator.style.left = `${snapped.x}px`;
-      snapIndicator.style.top = `${snapped.y}px`;
-      ring.style.left = `${snapped.x}px`;
-      ring.style.top = `${snapped.y}px`;
-    } else {
-      snapIndicator.style.opacity = '0';
-      ring.style.left = `${curX}px`;
-      ring.style.top = `${curY}px`;
-    }
-
-    // Record path for circle gesture — Bug fix #6: throttle detection
-    pathHistory.push({ x: curX, y: curY });
-    if (pathHistory.length > 60) pathHistory.shift();
-    if (pathHistory.length >= 20 && pathHistory.length % 5 === 0) {
-      detectGesture();
-    }
-
-    // Dwell Clicking Logic — Bug fix #3: force position change after dwell click
-    if (isDwellClickingEnabled && !clickCooldown) {
-      const now = performance.now();
-      const dwellDist = Math.sqrt(Math.pow(curX - lastDwellX, 2) + Math.pow(curY - lastDwellY, 2));
-      
-      if (dwellDist < 30) {
-        if (!isDwelling) {
-          isDwelling = true;
-          dwellStartTime = now;
-        } else if (now - dwellStartTime > 1200) {
-          const snapped = getNearestTarget(curX, curY);
-          const target = snapped ? snapped.element : document.elementFromPoint(curX, curY);
-          if (target) triggerClick(target);
-          
-          isDwelling = false;
-          // Force cursor to move away before next dwell can start
-          lastDwellX = -9999;
-          lastDwellY = -9999;
-        }
-      } else {
-        isDwelling = false;
-        lastDwellX = curX;
-        lastDwellY = curY;
-        dwellStartTime = now;
+    // === Guard: only allow interactions when the extension is actively connected ===
+    if (isUIVisible) {
+      // Aim assist
+      let snapped = null;
+      if (isAimAssistEnabled) {
+        snapped = getNearestTarget(curX, curY);
       }
-    }
 
-    handleEdgeScroll(curY);
-    handleBrowserNav(curX);
+      if (snapped) {
+        snapIndicator.style.opacity = '1';
+        snapIndicator.style.left = `${snapped.x}px`;
+        snapIndicator.style.top = `${snapped.y}px`;
+        ring.style.left = `${snapped.x}px`;
+        ring.style.top = `${snapped.y}px`;
+      } else {
+        snapIndicator.style.opacity = '0';
+        ring.style.left = `${curX}px`;
+        ring.style.top = `${curY}px`;
+      }
+
+      // Record path for circle gesture — Bug fix #6: throttle detection
+      pathHistory.push({ x: curX, y: curY });
+      if (pathHistory.length > 60) pathHistory.shift();
+      if (pathHistory.length >= 20 && pathHistory.length % 5 === 0) {
+        detectGesture();
+      }
+
+      // Dwell Clicking Logic — Bug fix #3: force position change after dwell click
+      if (isDwellClickingEnabled && !clickCooldown) {
+        const now = performance.now();
+        const dwellDist = Math.sqrt(Math.pow(curX - lastDwellX, 2) + Math.pow(curY - lastDwellY, 2));
+        
+        if (dwellDist < 30) {
+          if (!isDwelling) {
+            isDwelling = true;
+            dwellStartTime = now;
+          } else if (now - dwellStartTime > 1200) {
+            const snapped = getNearestTarget(curX, curY);
+            const target = snapped ? snapped.element : document.elementFromPoint(curX, curY);
+            if (target) triggerClick(target);
+            
+            isDwelling = false;
+            // Force cursor to move away before next dwell can start
+            lastDwellX = -9999;
+            lastDwellY = -9999;
+          }
+        } else {
+          isDwelling = false;
+          lastDwellX = curX;
+          lastDwellY = curY;
+          dwellStartTime = now;
+        }
+      }
+
+      handleEdgeScroll(curY);
+      handleBrowserNav(curX);
+    } else {
+      // Panel is closed / heartbeat timed out — reset all interaction state
+      isDwelling = false;
+      lastDwellX = -9999;
+      lastDwellY = -9999;
+      pathHistory = [];
+    }
 
     requestAnimationFrame(updateCursorPhysics);
   }
@@ -585,6 +607,16 @@
       console.log("[BUG Voice] ✅ Voice recognition ACTIVE");
     };
     
+    // Send voice log entry to sidepanel
+    function sendVoiceLog(text, type, command) {
+      chrome.runtime.sendMessage({
+        action: 'voice_log',
+        text: text,
+        type: type,        // 'executed', 'heard', 'skipped'
+        command: command || null
+      }).catch(() => {});
+    }
+
     recognition.onresult = (event) => {
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const transcript = event.results[i][0].transcript.trim().toLowerCase();
@@ -597,9 +629,11 @@
           
           // Only execute final result if we didn't already trigger an instant action for it
           if (!wasInterimMatched) {
-            handleVoiceCommand(transcript);
+            const executedCmd = handleVoiceCommand(transcript);
+            sendVoiceLog(transcript, executedCmd ? 'executed' : 'heard', executedCmd);
           } else {
             console.log("[BUG Voice] Skipped final result (already executed as instant command)");
+            sendVoiceLog(transcript, 'skipped', lastInterimMatch);
           }
         } else {
           // Interim result — instantly match known short commands
@@ -608,6 +642,7 @@
             lastInterimMatch = matched;
             console.log("[BUG Voice] Instant:", matched);
             handleVoiceCommand(matched);
+            sendVoiceLog(transcript, 'executed', matched);
           }
         }
       }
@@ -616,10 +651,12 @@
     recognition.onend = () => {
       voiceRunning = false;
       if (voicePausedForTTS) return;
+      if (voicePausedByVisibility) return; // Tab is hidden — don't restart
       if (window._bugActiveInstance !== INSTANCE_ID) return;
-      if (isVoiceEnabled) {
+      // In continuous mode, onend only fires on errors/interruptions — restart to keep listening
+      if (isVoiceEnabled && !document.hidden) {
         setTimeout(() => {
-          if (isVoiceEnabled && !voicePausedForTTS && window._bugActiveInstance === INSTANCE_ID) {
+          if (isVoiceEnabled && !voicePausedForTTS && !voicePausedByVisibility && !document.hidden && window._bugActiveInstance === INSTANCE_ID) {
             voiceRunning = false;
             startVoiceRecognition();
           }
@@ -628,7 +665,9 @@
     };
     
     recognition.onerror = (e) => {
-      console.warn("[BUG Voice] Error:", e.error);
+      if (e.error !== 'aborted') {
+        console.warn("[BUG Voice] Error:", e.error);
+      }
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
         isVoiceEnabled = false;
       }
@@ -666,6 +705,7 @@
   let voiceContext = "default";
   let voiceSynthesis = window.speechSynthesis;
   let voicePausedForTTS = false;
+  let voicePausedByVisibility = false;
 
   function handleVoiceCommand(command) {
     console.log("Executing:", command);
@@ -676,36 +716,44 @@
       if (command && !command.includes("cancel") && !command.includes("stop")) {
         chrome.runtime.sendMessage({ action: 'voice_search', query: command });
       }
-      return;
+      return "search: " + command;
     }
 
     // Bug fix #5: use .includes() instead of strict === for commands that
     // speech recognition may add trailing words to
     if (command.includes("down")) {
       window.scrollBy({ top: 500, behavior: "smooth" });
+      return "scroll down";
     }
     else if (command.includes("up")) {
       window.scrollBy({ top: -500, behavior: "smooth" });
+      return "scroll up";
     }
     else if (command.includes("top")) {
       window.scrollTo({ top: 0, behavior: "smooth" });
+      return "go to top";
     }
     else if (command.includes("bottom")) {
       window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      return "go to bottom";
     }
     else if (command.includes("click")) {
       const snapped = getNearestTarget(curX, curY);
       const target = snapped ? snapped.element : document.elementFromPoint(curX, curY);
       if (target) triggerClick(target);
+      return "click";
     }
     else if (command.includes("go back") || command.includes("back")) {
       history.back();
+      return "go back";
     }
     else if (command.includes("go forward") || command.includes("forward")) {
       history.forward();
+      return "go forward";
     }
     else if (command.includes("reload") || command.includes("refresh")) {
       location.reload();
+      return "reload";
     }
     else if (command.startsWith("search ")) {
       // One-shot search (e.g. "search python jobs")
@@ -713,6 +761,7 @@
       if (query) {
         chrome.runtime.sendMessage({ action: 'voice_search', query: query });
       }
+      return "search: " + query;
     }
     else if (command.trim() === "search") {
       // Two-step conversational search
@@ -743,14 +792,21 @@
         voiceRunning = false;
         startVoiceRecognition();
       }
+      return "search (waiting...)";
     }
+
+    return null; // No command matched
   }
 
   // Start physics loop
   requestAnimationFrame(updateCursorPhysics);
 
   // Message listener
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  const messageListener = (message, sender, sendResponse) => {
+    if (window._bugActiveInstance !== INSTANCE_ID) {
+      chrome.runtime.onMessage.removeListener(messageListener);
+      return;
+    }
     try {
       if (['heartbeat', 'move_cursor', 'config', 'mouth_click', 'voice_toggle'].includes(message.action)) {
         lastHeartbeatTime = Date.now();
@@ -779,7 +835,7 @@
         }
         updateUIVisibility();
       } else if (message.action === 'mouth_click') {
-        if (!isMouthClickingEnabled) return;
+        if (!isMouthClickingEnabled || !isUIVisible) return;
         const snapped = getNearestTarget(curX, curY);
         const targetElement = snapped ? snapped.element : document.elementFromPoint(curX, curY);
         if (targetElement) triggerClick(targetElement);
@@ -796,5 +852,36 @@
       console.error('Face Navigator: message handler error', err);
     }
     return;
+  };
+  chrome.runtime.onMessage.addListener(messageListener);
+
+  // Bug fix #11: Only the active (visible) tab should hold the microphone.
+  // When the user switches tabs, pause voice recognition in the old tab.
+  // When the tab regains focus, resume if voice was enabled.
+  document.addEventListener('visibilitychange', () => {
+    if (window._bugActiveInstance !== INSTANCE_ID) return;
+
+    if (document.hidden) {
+      // Tab lost focus — release the microphone
+      if (voiceRunning) {
+        voicePausedByVisibility = true;
+        console.log("[BUG Voice] Tab hidden — pausing recognition");
+        if (recognition) {
+          try { recognition.stop(); } catch(e) {}
+        }
+        voiceRunning = false;
+      }
+    } else {
+      // Tab regained focus — resume if voice was paused by tab switch
+      if (voicePausedByVisibility && isVoiceEnabled) {
+        voicePausedByVisibility = false;
+        console.log("[BUG Voice] Tab visible — resuming recognition");
+        setTimeout(() => {
+          if (isVoiceEnabled && !voiceRunning && window._bugActiveInstance === INSTANCE_ID) {
+            startVoiceRecognition();
+          }
+        }, 200);
+      }
+    }
   });
 })();

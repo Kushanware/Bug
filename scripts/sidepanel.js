@@ -148,12 +148,64 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Listen for permission granted message from the permission tab
+  // AND voice log entries from content script (via background relay)
+  const voiceLogSection = document.getElementById('voice-log-section');
+  const voiceLogContainer = document.getElementById('voice-log');
+  const btnClearLog = document.getElementById('btn-clear-log');
+  const MAX_LOG_ENTRIES = 30;
+
+  function addVoiceLogEntry(text, type, command) {
+    const entry = document.createElement('div');
+    entry.className = 'voice-log-entry';
+
+    const badge = document.createElement('span');
+    badge.className = 'voice-log-badge';
+    if (type === 'executed') {
+      badge.classList.add('badge-executed');
+      badge.textContent = '✓ ' + (command || 'run');
+    } else if (type === 'heard') {
+      badge.classList.add('badge-heard');
+      badge.textContent = '? heard';
+    } else {
+      badge.classList.add('badge-ignored');
+      badge.textContent = '— skip';
+    }
+
+    const textEl = document.createElement('span');
+    textEl.className = 'voice-log-text';
+    textEl.textContent = `"${text}"`;
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'voice-log-time';
+    const now = new Date();
+    timeEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    entry.appendChild(badge);
+    entry.appendChild(textEl);
+    entry.appendChild(timeEl);
+
+    // Prepend (newest first)
+    voiceLogContainer.insertBefore(entry, voiceLogContainer.firstChild);
+
+    // Trim old entries
+    while (voiceLogContainer.children.length > MAX_LOG_ENTRIES) {
+      voiceLogContainer.removeChild(voiceLogContainer.lastChild);
+    }
+  }
+
+  btnClearLog.addEventListener('click', () => {
+    voiceLogContainer.innerHTML = '';
+  });
+
   chrome.runtime.onMessage.addListener((message) => {
     if (message.action === 'permission_granted') {
       console.log("Camera permission granted message received, starting camera...");
       toggleNavigation.checked = true;
       syncConfig();
       startCamera();
+    }
+    if (message.action === 'voice_log') {
+      addVoiceLogEntry(message.text, message.type, message.command);
     }
   });
 
@@ -169,6 +221,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       toggleVoice.checked ? "Listening" : "Ready",
       toggleVoice.checked ? "state-listening" : "state-ready"
     );
+
+    // Show/hide voice log
+    if (toggleVoice.checked) {
+      voiceLogSection.classList.remove('hidden');
+    } else {
+      voiceLogSection.classList.add('hidden');
+    }
 
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (!tabs.length) return;

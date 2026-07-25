@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BUG Permissions</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+      text-align: center;
+      max-width: 500px;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+      color: #1a1a1a;
+    }
+    p {
+      line-height: 1.5;
+      color: #555;
+      margin-bottom: 24px;
+    }
+    button {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #1557b0;
+    }
+    #status {
+      margin-top: 20px;
+      font-weight: 500;
+    }
+    .success {
+      color: #0f9d58;
+    }
+    .error {
+      color: #d93025;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Microphone Permission Required</h1>
+    <p>To use Voice Commands with BUG, you need to grant the extension microphone access.</p>
+    <button id="request-btn">Grant Microphone Permission</button>
+    <div id="status"></div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

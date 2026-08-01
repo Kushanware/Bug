@@ -1,4 +1,4 @@
-(function() {
+(function () {
   'use strict';
 
   const STATUS_EVENT = 'gaze:status';
@@ -67,9 +67,9 @@
   let detectInProgress = false;
   let framesSkipped = 0;
   let detectDurations = [];
-let headModeWarned = false;
-let headFrameErrorLogged = false;
-let headAutoCenter = { nx: 0, ny: 0, ready: false };
+  let headModeWarned = false;
+  let headFrameErrorLogged = false;
+  let headAutoCenter = { nx: 0, ny: 0, ready: false };
   let earCal = null;
   let earCalStage = 'idle';
   let earOpenSamples = [];
@@ -618,7 +618,7 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
       try {
         const humanModuleUrl = chrome.runtime.getURL(HUMAN_MODULE_PATH);
         const { default: Human } = await import(humanModuleUrl);
-        
+
         const humanConfig = {
           backend: 'webgl',
           cacheSensitivity: 0,
@@ -636,7 +636,7 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
           object: { enabled: false },
           segmentation: { enabled: false }
         };
-        
+
         human = new Human(humanConfig);
         await human.load();
         await human.warmup();
@@ -792,14 +792,7 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
       window.__lastHeadFrame = { nx: 0, ny: 0, yawDeg, pitchDeg };
     }
 
-    // Blink detection disabled - was causing issues and not accurate enough
-    // if (Array.isArray(face.mesh)) {
-    //   if (!earCal) {
-    //     ensureEarCalibration(face.mesh, ts);
-    //   } else {
-    //     updateBlinkState(face.mesh, ts);
-    //   }
-    // }
+
 
     // Mouth-open detection for click (more reliable than emotion detection)
     if (face.annotations && !window.__gazeHeadCalActive) {
@@ -918,10 +911,10 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
             const dist = Math.sqrt(dx * dx + dy * dy);
             const screenDiag = Math.sqrt(window.innerWidth ** 2 + window.innerHeight ** 2);
             const normalizedDist = dist / screenDiag;
-            
+
             // Ultra-stable when holding still near links (alpha ~0.04), snappy when moving across screen (up to 0.16)
             let smoothingAlpha = 0.04 + Math.min(0.12, normalizedDist * 0.35);
-            
+
             finalX = lastHeadPoint[0] + smoothingAlpha * dx;
             finalY = lastHeadPoint[1] + smoothingAlpha * dy;
             lastHeadPoint[0] = finalX;
@@ -1216,7 +1209,7 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
       gazeEnabled = Boolean(changes[GAZE_ENABLED_KEY].newValue);
       if (gazeEnabled) {
         dispatchStatus('loading', 'Initializing...');
-        ensureInitialized().catch(() => {});
+        ensureInitialized().catch(() => { });
       } else {
         // Disable head tracking
         teardown();
@@ -1255,6 +1248,31 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
   function handleVisibilityChange() {
     // no-op; head filters automatically reset when face is lost
   }
+
+  // Add memory cleanup function
+  function cleanupGPUMemory() {
+    // Clear texture cache
+    if (textureManager) {
+      textureManager.dispose();
+    }
+
+    // Clear WebGL context
+    if (gl) {
+      gl.finish();
+    }
+
+    // Force garbage collection hint
+    if (window.gc) {
+      window.gc();
+    }
+  }
+
+  // Call periodically
+  setInterval(() => {
+    if (gazeEnabled && !window.__gazeHeadCalActive) {
+      cleanupGPUMemory();
+    }
+  }, 30000); // Every 30 seconds
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
   chrome.storage.onChanged.addListener(handleStorageChange);
@@ -1330,7 +1348,7 @@ let headAutoCenter = { nx: 0, ny: 0, ready: false };
     }
 
     if (gazeEnabled) {
-      ensureInitialized().catch(() => {});
+      ensureInitialized().catch(() => { });
     } else {
       dispatchStatus('ready', 'Enable gaze tracking to start');
     }

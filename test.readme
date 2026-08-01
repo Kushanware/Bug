@@ -1,0 +1,467 @@
+# 🧪 BUG — Tests & Features Guide
+
+This file documents **every feature** of the BUG extension and all the **tests** you should run to verify them.  
+Complete the **Calibration** steps first — most tests depend on calibrated head tracking and mouth detection.
+
+---
+
+## 📋 Prerequisites (before any test)
+
+1. **Chrome Dev / Canary** (v128+) with the following flags enabled:
+   - `chrome://flags/#optimization-guide-on-device-model` → **Enabled BypassPerfRequirement**
+   - `chrome://flags/#prompt-api-for-gemini-nano` → **Enabled**
+   - `chrome://flags/#summarization-api-for-gemini-nano` → **Enabled**
+   - Restart Chrome after changing flags.
+2. **Extension loaded**: `chrome://extensions` → Developer Mode → Load unpacked → select the repo root.
+3. **Camera permission granted**: click the BUG icon and allow webcam access.
+4. **AI model ready**: run `await ai.summarizer.availability()` in DevTools console — must return `"readily"`.
+
+---
+
+## 🎛️ Calibration Steps (MUST DO BEFORE TESTING)
+
+### Step 1 — Head Tracking Calibration (`Alt+H`)
+
+This maps your natural head movement range to screen coordinates.
+
+| Pose | Action |
+|------|--------|
+| 1. **CENTER** | Look straight ahead → press **Space** |
+| 2. **LEFT** | Rotate head gently left → press **Space** |
+| 3. **RIGHT** | Rotate head gently right → press **Space** |
+| 4. **UP** | Nod head slightly up → press **Space** |
+| 5. **DOWN** | Nod head slightly down → press **Space** |
+| 6. **CENTER AGAIN** | Return to neutral → press **Space** to finish |
+
+> **Tips:**  
+> - Good front-facing lighting makes a big difference.  
+> - Keep your torso stable; move only your head.  
+> - Each step captures 4–120 samples over 1.5 s — hold still until you hear the step advance.  
+> - Calibration is stored as `headCalV2` in `chrome.storage.local` and persists across sessions.
+
+### Step 2 — Mouth Click Calibration (`Alt+M`)
+
+This teaches the extension your open/closed mouth ratio.
+
+1. Toggle **"Enable Mouth Click"** in the side panel.
+2. Press **Alt+M** (or click **"Calibrate Mouth Click"** in the panel).
+3. **Step A — Closed**: keep your mouth closed when prompted. The system collects baseline samples.
+4. **Step B — Open**: open your mouth wide when prompted. Samples are collected and a threshold is computed.
+5. After calibration the data is stored as `mouthCalV1`.
+
+> **Tips:**  
+> - Exaggerate the open position during calibration for reliable detection.  
+> - Ensure the camera can see your mouth clearly.
+
+### Step 3 — Blink Calibration (automatic / inline)
+
+The blink calibration runs inline when head tracking starts:
+
+1. Keep your eyes open for ~1 second.
+2. Close them gently for ~0.7 s.
+3. The extension stores thresholds as `earCalV2`, enabling:
+   - **Long blink ≥ 1 s** → left click
+   - **Long blink ≥ 2 s** → right click
+
+---
+
+## 🌟 Features List
+
+### 1. Hands-Free Control
+| Feature | Description |
+|---------|-------------|
+| **Head Tracking** | Nose-vs-eye face features drive cursor position with One-Euro filtering |
+| **Mouth-Open Click** | Open mouth → triggers click (800 ms cooldown prevents double-clicks) |
+| **Dwell Activation** | Hover 600 ms on any link → automatic click; growing ring indicator |
+| **Magnetic Snapping** | Cursor snaps to nearby clickables within 45 px radius |
+| **Auto-Scroll Zones** | Look at top / bottom 180 px edge → page scrolls |
+| **Navigation Zones** | Look at left 80 px edge → browser back; right 80 px → forward |
+
+### 2. AI-Powered Link Previews
+| Feature | Description |
+|---------|-------------|
+| **Web Article Summaries** | Readability.js extracts content → Chrome Summarizer API → streaming tooltip |
+| **YouTube Video Summaries** | XHR intercept captures captions (JSON3 / XML) → Prompt API → structured summary |
+| **Reddit Discussion Summaries** | Hover a Reddit post → comment-driven summary via "Summarizing Reddit discussion…" |
+| **Twitter/X Conversation Summaries** | Hover a tweet → background tab captures GraphQL conversation → summary |
+| **Smart Caching** | Summaries cached for 30 minutes |
+| **Dual Display** | Show summaries in tooltip, side panel, or both |
+| **Streaming Output** | Real-time character-by-character updates while AI generates |
+
+### 3. Customization & Settings
+| Feature | Description |
+|---------|-------------|
+| Adjustable dwell time | 300–1500 ms via side panel slider |
+| Head calibration | 5-point personalization (`Alt+H`) |
+| Mouth calibration | Adaptive thresholds (`Alt+M`) |
+| Display modes | Tooltip / Panel / Both |
+| API choice | Summarizer API or custom Prompt API |
+| Enhanced Dwell Sensitivity | New Update — finer control over dwell responsiveness |
+
+### 4. Privacy & Performance
+- 100 % local processing (no external servers)
+- Webcam-based (any standard camera)
+- GPU-accelerated tracking (WebGL)
+- Lightweight (~2 MB extension)
+- Works offline after initial model download
+
+---
+
+## 🧪 All Tests
+
+### T01 — Head Tracking Cursor Movement
+| Item | Detail |
+|------|--------|
+| **Precondition** | Head calibration completed (`Alt+H`) |
+| **Steps** | 1. Enable head tracking in side panel. 2. Look left / right / up / down. |
+| **Expected** | Cursor moves smoothly across the viewport without excessive jitter. |
+| **Verify** | One-Euro filter params: `fc=0.4`, `β=0.0025`, `d_cutoff=1.0`. |
+
+### T02 — Mouth-Open Click
+| Item | Detail |
+|------|--------|
+| **Precondition** | Mouth calibration completed (`Alt+M`), "Enable Mouth Click" toggled ON |
+| **Steps** | 1. Move cursor over a clickable element. 2. Open mouth. |
+| **Expected** | A single click fires. No double-click within the 800 ms cooldown window. |
+| **Verify** | Visual feedback appears on click. |
+
+### T03 — Dwell Activation
+| Item | Detail |
+|------|--------|
+| **Precondition** | Head tracking active |
+| **Steps** | 1. Hover cursor over a link for ~600 ms. |
+| **Expected** | Growing ring indicator completes → click fires. |
+| **Verify** | Adjusting dwell time slider (300–1500 ms) changes the activation delay. |
+
+### T04 — Magnetic Snapping
+| Item | Detail |
+|------|--------|
+| **Precondition** | Head tracking active |
+| **Steps** | 1. Move cursor near (within 45 px) a clickable link/button. |
+| **Expected** | Cursor snaps onto the target element. |
+
+### T05 — Auto-Scroll Zones
+| Item | Detail |
+|------|--------|
+| **Precondition** | Head tracking active, page is scrollable |
+| **Steps** | 1. Look at the top 180 px of the viewport → page scrolls up. 2. Look at the bottom 180 px → page scrolls down. |
+| **Expected** | Smooth continuous scrolling while gaze remains in the zone. Colored visual feedback appears. |
+
+### T06 — Browser Navigation Zones
+| Item | Detail |
+|------|--------|
+| **Precondition** | Head tracking active, browser history exists |
+| **Steps** | 1. Look at the left 80 px edge → browser goes back. 2. Look at the right 80 px edge → browser goes forward. |
+| **Expected** | Navigation fires; colored zone overlay visible. |
+
+### T07 — Long-Blink Click
+| Item | Detail |
+|------|--------|
+| **Precondition** | Blink calibration done (`earCalV2` stored) |
+| **Steps** | 1. Close eyes ≥ 1 s → left click. 2. Close eyes ≥ 2 s → right click. |
+| **Expected** | Synthetic clicks land on the sticky target under the cursor. |
+
+### T08 — Web Article AI Summary
+| Item | Detail |
+|------|--------|
+| **Precondition** | AI model ready (`"readily"`), extension loaded |
+| **Steps** | 1. Open any long article (e.g., Wikipedia). 2. Hover over a link for ~600 ms. |
+| **Expected** | Tooltip streams a markdown key-point summary. Side panel shows the same content if dual display is on. |
+| **Verify** | Console logs show `FETCH_CONTENT` → `SUMMARIZE_CONTENT` pipeline. |
+
+### T09 — YouTube Caption Extraction & Summary
+| Item | Detail |
+|------|--------|
+| **Precondition** | AI model ready, extension loaded |
+| **Steps** | 1. Open YouTube. 2. Dwell on a video thumbnail. |
+| **Expected** | Captions are captured (JSON3 or XML format) → streamed summary appears in tooltip. |
+| **Sample Video IDs** | `dQw4w9WgXcQ`, `jNQXAC9IVRw`, `9bZkp7q19f0` |
+| **Test Harness** | Open `test/youtube-test.html` locally or via `python3 -m http.server 8000`. Run **Direct API** and **Method 4 (Network Intercept)** scenarios. Confirm all three sample IDs succeed. |
+
+### T10 — YouTube Test Page — Direct API
+| Item | Detail |
+|------|--------|
+| **Precondition** | `test/youtube-test.html` served locally |
+| **Steps** | 1. Select a video ID (or enter a custom one). 2. Click **"Test Direct API"**. 3. Click **"Test All Videos"**. |
+| **Expected** | Statistics update; console shows fetched captions and success/failure per video. |
+
+### T11 — YouTube Test Page — Method 4 (Network Intercept)
+| Item | Detail |
+|------|--------|
+| **Precondition** | `test/youtube-test.html` served locally |
+| **Steps** | 1. Click **"Setup Intercept"**. 2. Open YouTube in a new tab and hover over thumbnails. |
+| **Expected** | Captions are captured automatically; `method4-status` updates with results. |
+
+### T12 — Reddit Hover Summary
+| Item | Detail |
+|------|--------|
+| **Precondition** | AI model ready, extension loaded |
+| **Steps** | 1. Browse `reddit.com` hot posts (mix of self and link posts). 2. Hover a post link. |
+| **Expected** | Tooltip shows "Summarizing Reddit discussion…" state → produces comment-driven output. |
+| **Edge Case** | If the thread has no accessible comments, capture console errors and verify graceful fallback. |
+
+### T13 — Twitter/X Conversation Summary
+| Item | Detail |
+|------|--------|
+| **Precondition** | AI model ready, extension loaded |
+| **Steps** | 1. Load a Twitter/X conversation. 2. Hover the main tweet. 3. Hover a reply tweet. |
+| **Expected** | Tooltip briefly shows "Opening conversation…" → full summary appears. |
+| **Verify** | First hover spawns a muted background tab that closes automatically. Service worker console shows `"Background capture nodes"` logs with multiple tweets. |
+
+### T14 — Summary Cancellation (`Esc`)
+| Item | Detail |
+|------|--------|
+| **Steps** | 1. Hover a link to start a summary. 2. Press **Esc** mid-run. |
+| **Expected** | Tooltip hides. Active YouTube capture job (if any) is aborted. |
+
+### T15 — Cache Behaviour
+| Item | Detail |
+|------|--------|
+| **Steps** | 1. Hover a link → get a summary. 2. Move away and hover again within 30 min. |
+| **Expected** | Second hover loads instantly from cache (no AI re-processing). |
+| **Verify** | Console logs show cache hit. |
+
+### T16 — Side Panel UI & Settings
+| Item | Detail |
+|------|--------|
+| **Steps** | 1. Open the BUG side panel. 2. Toggle each setting (head tracking, mouth click, display mode, API choice, dwell slider). |
+| **Expected** | Each toggle takes effect immediately on the active tab. Settings persist across sessions. |
+
+### T17 — Debug HUD & Overlays
+| Item | Detail |
+|------|--------|
+| **Shortcuts** | `Shift+H` → toggle debug HUD, `Alt+P` → toggle red pointer, `Alt+V` → toggle mirrored camera preview, `Alt+N` → toggle head-pointer mode on/off. |
+| **Expected** | Each overlay renders and un-renders correctly without breaking page layout. |
+
+### T18 — WebGazer Hover Prototype (Experimental)
+| Item | Detail |
+|------|--------|
+| **Precondition** | Open `test/webgazer-demo.html` inside the extension context |
+| **Steps** | 1. Click **"Start Webcam Calibration"** → click each blue dot 3× times. 2. Click **"Begin Gaze Hover Mode"**. 3. Stare at a sample article card for ~750 ms. |
+| **Expected** | Summary request triggers and a tooltip/placeholder appears. |
+
+### T19 — Service Worker Resilience
+| Item | Detail |
+|------|--------|
+| **Steps** | 1. Enable intercept. 2. Exercise hover previews on a live YouTube tab. 3. Reload the service worker from `chrome://extensions`. |
+| **Expected** | After reload, hover previews still work. Note browser/version and whether the service worker was reloaded. |
+
+### T20 — Enhanced Dwell Sensitivity (New Feature)
+| Item | Detail |
+|------|--------|
+| **Steps** | 1. Open the options/side panel. 2. Adjust the dwell sensitivity slider to its minimum and maximum. 3. Hover links and observe activation speed. |
+| **Expected** | Minimum setting → very fast dwell; maximum → slower, deliberate dwell. |
+
+### T21 — Voice Commands
+| Item | Detail |
+|------|--------|
+| **Precondition** | Voice enabled in side panel ("Enable Voice" toggle ON), microphone permission granted |
+| **Steps** | 1. Say each command from the Voice Commands Reference below. 2. Verify the correct action fires. 3. Say `"help"` → TTS reads available commands. 4. Say `"search"` → TTS asks "What do you want to search?" → speak a query → Google opens. |
+| **Expected** | Each command triggers the corresponding action. Voice log in the side panel shows badge (executed / heard / unknown). Duplicate commands within the same recognition cycle are ignored. |
+
+---
+
+## 🎙️ Voice Commands Reference
+
+Enable voice control from the side panel ("Enable Voice" toggle) or by saying **"enable voice"**.  
+Say **"help"** at any time to hear available commands via TTS.
+
+### 🧭 Navigation Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"scroll down"` / `"page down"` | Scroll down ~80% of the viewport |
+| `"scroll up"` / `"page up"` | Scroll up ~80% of the viewport |
+| `"scroll left"` | Scroll left 300 px |
+| `"scroll right"` | Scroll right 300 px |
+| `"scroll faster"` | Scroll down 150% of the viewport |
+| `"scroll slower"` | Scroll down 30% of the viewport |
+| `"stop scrolling"` / `"stop"` | Stop current scroll |
+| `"scroll to top"` / `"top"` | Jump to top of page |
+| `"scroll to bottom"` / `"bottom"` | Jump to bottom of page |
+| `"go back"` / `"back"` | Browser back (`history.back()`) |
+| `"go forward"` / `"forward"` | Browser forward (`history.forward()`) |
+| `"reload"` / `"refresh"` | Reload page |
+
+### 🖱️ Click Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"click"` | Left-click the focused / hovered element (YouTube & Google-aware) |
+| `"double click"` | Double-click current element |
+| `"right click"` | Right-click (context menu) current element |
+| `"left click"` | Explicit left-click current element |
+| `"hover"` | Dispatch mouseenter / mouseover on current element |
+
+### 🗂️ Tab Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"new tab"` | Open a new browser tab |
+| `"close tab"` | Close current tab |
+| `"next tab"` | Switch to next tab |
+| `"previous tab"` / `"prev tab"` | Switch to previous tab |
+
+### 🔍 Zoom Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"zoom in"` | Zoom page in (×1.1) |
+| `"zoom out"` | Zoom page out (÷1.1) |
+| `"reset zoom"` | Reset zoom to 100% |
+
+### 🖥️ Fullscreen Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"fullscreen"` / `"full screen"` | Toggle fullscreen mode |
+| `"exit fullscreen"` | Exit fullscreen mode |
+
+### ✏️ Text & Selection Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"select all"` | Select all text (input-aware) |
+| `"copy"` | Copy selected text to clipboard |
+| `"paste"` | Paste from clipboard into active field |
+| `"cut"` | Cut selected text |
+| `"undo"` | Undo last action |
+| `"redo"` | Redo last action |
+| `"clear text"` / `"clear"` | Clear text in active input/textarea |
+| `"delete last word"` | Delete the last word before cursor |
+
+### ⌨️ Text Input / Dictation Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"start typing"` | Focus first input field & enable dictation mode |
+| `"stop typing"` | Blur active field & exit dictation mode |
+| `"start copy"` | Enable copy mode (select then stop copy) |
+| `"stop copy"` | Copy current selection & exit copy mode |
+| `"start paste"` | Paste clipboard into active field |
+| `"stop paste"` | Exit paste mode |
+
+### ⌨️ Key Press Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"press enter"` / `"enter"` | Dispatch Enter key |
+| `"press tab"` / `"tab"` | Dispatch Tab key |
+| `"press escape"` / `"escape"` / `"esc"` | Dispatch Escape key |
+
+### 📝 Form Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"next field"` | Move focus to next form field |
+| `"previous field"` / `"prev field"` | Move focus to previous form field |
+| `"check checkbox"` / `"check box"` | Check focused (or first unchecked) checkbox |
+| `"uncheck checkbox"` / `"uncheck box"` | Uncheck focused (or first checked) checkbox |
+| `"submit form"` / `"submit"` | Submit the current form |
+
+### 🎬 Media Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"play"` | Play video/audio |
+| `"pause"` | Pause video/audio |
+| `"mute"` | Mute media |
+| `"unmute"` | Unmute media |
+| `"volume up"` | Increase volume (+10%) |
+| `"volume down"` | Decrease volume (−10%) |
+| `"next video"` | Go to next video (YouTube-aware) |
+| `"previous video"` / `"prev video"` | Go to previous video |
+| `"skip forward"` / `"skip ahead"` | Skip forward 10 seconds |
+| `"rewind"` / `"skip back"` | Rewind 10 seconds |
+
+### 📺 YouTube-Specific Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"play video"` | Play YouTube video |
+| `"pause video"` | Pause YouTube video |
+| `"youtube next"` / `"yt next"` | Next YouTube video |
+| `"youtube previous"` / `"yt prev"` | Previous YouTube video |
+| `"skip 10 seconds"` / `"skip ten seconds"` | Skip forward 10 s |
+| `"rewind 10 seconds"` / `"rewind ten seconds"` | Rewind 10 s |
+
+### ♿ Accessibility Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"read page"` / `"read aloud"` | Read entire page via TTS |
+| `"stop reading"` | Stop TTS |
+| `"read selected text"` / `"read selection"` | Read highlighted text via TTS |
+| `"increase text size"` | Enlarge page text (+10%) |
+| `"decrease text size"` | Shrink page text (−10%, min 8 px) |
+
+### 🔧 Extension / BUG Control Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"enable voice"` / `"turn on voice"` | Enable voice recognition |
+| `"disable voice"` / `"turn off voice"` | Disable voice recognition |
+| `"enable mouth click"` | Enable mouth-click feature |
+| `"disable mouth click"` | Disable mouth-click feature |
+| `"enable head tracking"` | Enable head-tracking cursor |
+| `"disable head tracking"` | Disable head-tracking cursor |
+| `"start calibration"` / `"calibrate"` | Launch head-tracking calibration (`Alt+H`) |
+| `"reset calibration"` | Clear stored calibration data |
+
+### 🌐 Browser Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"open history"` / `"history"` | Open browser history page |
+| `"open downloads"` / `"downloads"` | Open downloads page |
+| `"open bookmarks"` / `"bookmarks"` | Open bookmarks page |
+
+### 🔎 Search Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"search <query>"` | Google search for `<query>` in a new tab |
+| `"search"` (alone) | TTS asks "What do you want to search?" — speak your query → Google opens |
+| `"find <text>"` | Find and highlight text on the current page |
+
+### 🔘 Google Search Result Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"open first result"` / `"first result"` | Click the first Google search result |
+| `"open second result"` / `"second result"` | Click the second result |
+| `"open third result"` / `"third result"` | Click the third result |
+
+### 💡 Smart / Utility Commands
+
+| Say this | What happens |
+|----------|-------------|
+| `"yes"` / `"yep"` / `"yeah"` | Click Yes / Confirm button |
+| `"no"` / `"nope"` | Click No / Cancel button |
+| `"cancel"` | Cancel current action or search prompt |
+| `"help"` | TTS reads available commands; full list logged to console |
+| `"repeat"` | Repeat last command |
+
+---
+
+## 📝 Recording Test Results
+
+After running the tests above, record your findings in a `TEST_RESULTS_<date>.md` file following the repo guidelines. Include:
+- Browser name & version
+- Whether the service worker was reloaded during testing
+- Pass / Fail for each test ID (T01–T21)
+- Console errors or screenshots for any failures
+
+---
+
+## 🔗 Quick Reference — Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Alt+H` | Start head calibration |
+| `Alt+M` | Start mouth calibration |
+| `Alt+N` | Toggle head-pointer mode on/off |
+| `Alt+P` | Toggle red pointer overlay |
+| `Alt+V` | Toggle mirrored camera preview |
+| `Shift+H` | Toggle debug HUD |
+| `Esc` | Cancel active summary |

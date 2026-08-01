@@ -143,6 +143,8 @@ Meanwhile, browsing the web means clicking countless links just to preview conte
 
 ## ✨ Key Features
 
+> **Note:** For a comprehensive list of tests and detailed feature breakdown, please see [test.readme](test.readme).
+
 ### Hands-Free Control
 - 🎯 **Head tracking** cursor control (no hands required)
 - 👄 **Mouth-open clicking** with calibration
@@ -164,6 +166,7 @@ Meanwhile, browsing the web means clicking countless links just to preview conte
 - 👄 **Mouth calibration** (adaptive thresholds)
 - 🎨 **Display modes** (tooltip, panel, or both)
 - ⚙️ **API choice** (Summarizer or custom Prompt)
+- 🆕 **Enhanced Dwell Sensitivity & Experimental Voice Triggers** (New Update)
 
 ### Privacy & Performance
 - 🔒 **100% local processing** (no external servers)
